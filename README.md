@@ -78,3 +78,7 @@ dotnet run -- "D:\videos\guide.mp4"
 git tag v0.2
 git push origin v0.2
 ```
+
+## 更新日志
+
+每个版本改了什么见 [CHANGELOG.md](CHANGELOG.md) —— 发版时它会自动被用作 Release 说明。
