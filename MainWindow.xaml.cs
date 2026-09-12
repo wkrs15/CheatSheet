@@ -234,8 +234,13 @@ public partial class MainWindow : Window
     /// </summary>
     private void BeginSeekHold(string actionKey, int direction)
     {
-        if (!_ready || _holdTimer.IsEnabled)
+        if (!_ready)
             return;
+
+        // 上一轮可能还没收尾(比如松手后轮询还没轮到)。这里先把它收干净,
+        // 而不是直接把这次按键吞掉 —— 以前那样会导致"长按过一次之后快进就没反应"。
+        if (_holdTimer.IsEnabled)
+            EndSeekHold();
 
         if (direction < 0)
         {
@@ -253,18 +258,21 @@ public partial class MainWindow : Window
         _holdTimer.Start();
     }
 
+    /// <summary>
+    /// 收尾:恢复倍速 + 清状态。写成幂等的 —— 以前开头有个
+    /// "定时器没在跑就直接 return",一旦走到那条路,倍速就卡在 2 倍回不来了。
+    /// </summary>
     private void EndSeekHold()
     {
-        if (!_holdTimer.IsEnabled)
-            return;
-
         _holdTimer.Stop();
         _heldGesture = null;
+        _heldByButton = false;
 
-        if (_seekHoldIsLongPress)
-            SetPlaybackSpeed(_speedBeforeHold);
+        if (!_seekHoldIsLongPress)
+            return;
 
         _seekHoldIsLongPress = false;
+        SetPlaybackSpeed(_speedBeforeHold);
     }
 
     /// <summary>轮询:判断有没有松开,同时把"长按快进"变成 2 倍速。</summary>
@@ -1059,45 +1067,13 @@ public partial class MainWindow : Window
         e.Handled = true;
     }
 
-    private void Window_KeyDown(object sender, KeyEventArgs e)
-    {
-        bool focusInCombo = Keyboard.FocusedElement is ComboBox;
-
-        switch (e.Key)
-        {
-            case Key.Space:
-                TogglePlayPause();
-                break;
-            case Key.Left when !focusInCombo:
-                BeginSeekHold("SeekBack", -1);
-                break;
-            case Key.Right when !focusInCombo:
-                BeginSeekHold("SeekForward", 1);
-                break;
-            case Key.Up when !focusInCombo:
-                ApplyVolume(_volumePercent + 5);
-                break;
-            case Key.Down when !focusInCombo:
-                ApplyVolume(_volumePercent - 5);
-                break;
-            case Key.M:
-                ToggleMute();
-                break;
-            default:
-                return;
-        }
-
-        e.Handled = true;
-    }
-
     /// <summary>
     /// 主窗口上不响应右键。
     /// <para>
-    /// 那个冒出 "Clear" 的东西,来自 HandyControl 的 Growl 宿主(根 Grid 上的
-    /// GrowlParent)自带的上下文菜单 —— 它显示在宿主中央,所以看着像浮在画面中间。
-    /// 之前拦 MouseRightButtonDown 没用:WPF 的 ContextMenu 是
-    /// <b>MouseRightButtonUp</b> 触发的。这里改拦 Up,并在 XAML 上直接关掉整个窗口的
-    /// ContextMenuService,双保险。
+    /// 那个冒出 "Clear" 的东西来自 HandyControl 的 Growl 宿主(根 Grid 上的 GrowlParent)
+    /// 自带的上下文菜单 —— 它显示在宿主中央,看着就像浮在画面中间。
+    /// 只拦 Down 没用:WPF 的 ContextMenu 是 <b>MouseRightButtonUp</b> 触发的。
+    /// XAML 里还顺手关掉了整个窗口的 ContextMenuService,双保险。
     /// </para>
     /// </summary>
     private void Window_PreviewMouseRightButtonUp(object sender, MouseButtonEventArgs e)

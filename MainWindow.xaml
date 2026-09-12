@@ -20,7 +20,6 @@
         Foreground="{DynamicResource PrimaryTextBrush}"
         TextOptions.TextFormattingMode="Display"
         UseLayoutRounding="True"
-        KeyDown="Window_KeyDown"
         KeyUp="Window_KeyUp"
         PreviewMouseRightButtonUp="Window_PreviewMouseRightButtonUp"
         ContextMenuService.IsEnabled="False"
