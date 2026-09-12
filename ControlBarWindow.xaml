@@ -107,7 +107,6 @@
 
             <Border Style="{StaticResource BarSeparator}" />
 
-            <Button x:Name="PinButton" Style="{StaticResource BarButton}" Content="&#xE718;" Click="Pin_Click" ToolTip="播放窗口置顶  (Ctrl+Alt+T)" />
             <Button Style="{StaticResource BarButton}" Content="&#xE713;" Click="Settings_Click" ToolTip="设置:改快捷键 / 透明度 / 音量 / 倍速" />
             <Button Style="{StaticResource BarButton}" Content="&#xE8BB;" Click="Exit_Click" ToolTip="退出 CheatSheet" />
         </StackPanel>

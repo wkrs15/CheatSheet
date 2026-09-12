@@ -174,7 +174,6 @@ public partial class ControlBarWindow : Window
         {
             PlayButton.Content = _main.IsPlaying ? "\uE769" : "\uE768";
             MuteButton.Content = _main.IsMuted ? "\uE74F" : "\uE767";
-            PinButton.Content = _main.IsTopmost ? "\uE718" : "\uE77A";
             SpeedButton.Content = _main.SpeedLabel;
             VolumeSlider.Value = _main.VolumePercent;
             TitleText.Text = _main.FileLabel;
@@ -213,8 +212,6 @@ public partial class ControlBarWindow : Window
 
         _main.SetVolume(e.NewValue);
     }
-
-    private void Pin_Click(object sender, RoutedEventArgs e) => _main.ToggleTopmost();
 
     private void Settings_Click(object sender, RoutedEventArgs e) => _main.OpenSettings();
 

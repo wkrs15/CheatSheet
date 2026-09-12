@@ -31,8 +31,8 @@ public partial class SettingsWindow : Window
         _main = main;
         InitializeComponent();
 
-        // 播放窗口置顶时设置窗口也置顶,免得游戏全屏时看不到它。
-        Topmost = _main.IsTopmost;
+        // 播放窗口一直置顶,设置窗口跟着置顶,免得游戏全屏时看不到它。
+        Topmost = true;
 
         HotkeyList.ItemsSource = _main.HotkeyActions;
         _main.StateChanged += OnMainStateChanged;

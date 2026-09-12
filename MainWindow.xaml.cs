@@ -78,7 +78,7 @@ public partial class MainWindow : Window
             new("PlayPause", "播放 / 暂停", "Ctrl+Alt+Space", TogglePlayPause),
             new("SeekBack", "快退(按住 2 倍速)", "Ctrl+Alt+Left", () => BeginSeekHold("SeekBack", -1)),
             new("SeekForward", "快进(按住 2 倍速)", "Ctrl+Alt+Right", () => BeginSeekHold("SeekForward", 1)),
-            new("Topmost", "窗口置顶", "Ctrl+Alt+T", ToggleTopmost),
+            new("WindowVisible", "显示 / 隐藏播放窗口", "Ctrl+Alt+T", ToggleWindowVisible),
             new("OpacityDown", "透明度 -", "Ctrl+Alt+Z", () => ChangeOpacity(-10)),
             new("OpacityUp", "透明度 +", "Ctrl+Alt+X", () => ChangeOpacity(10)),
         };
@@ -115,8 +115,6 @@ public partial class MainWindow : Window
     internal bool IsPlaying => _isPlaying;
 
     internal bool IsMuted => _muted;
-
-    internal bool IsTopmost => Topmost;
 
     internal double VolumePercent => _volumePercent;
 
@@ -198,9 +196,19 @@ public partial class MainWindow : Window
         }
     }
 
-    internal void ToggleTopmost()
+    /// <summary>显示 / 隐藏播放窗口(隐藏用最小化,这样任务栏还找得回来)。</summary>
+    internal void ToggleWindowVisible()
     {
-        Topmost = !Topmost;
+        if (WindowState == WindowState.Minimized)
+        {
+            WindowState = WindowState.Normal;
+            Activate();
+        }
+        else
+        {
+            WindowState = WindowState.Minimized;
+        }
+
         RaiseStateChanged();
     }
 
@@ -663,7 +671,8 @@ public partial class MainWindow : Window
             WindowStartupLocation = WindowStartupLocation.CenterScreen;
         }
 
-        Topmost = _settings.Topmost;
+        // 这个窗口一直置顶 —— 边玩游戏边看攻略,不置顶就没意义了。
+        Topmost = true;
     }
 
     private void SaveSettings()
@@ -675,8 +684,6 @@ public partial class MainWindow : Window
             _settings.WindowWidth = Width;
             _settings.WindowHeight = Height;
         }
-
-        _settings.Topmost = Topmost;
 
         // 存的仍然是"画面透明度"(字段名沿用 WindowOpacity,旧配置照旧能读)。
         _settings.WindowOpacity = VideoArea.Opacity;
@@ -1059,6 +1066,13 @@ public partial class MainWindow : Window
 
         e.Handled = true;
     }
+
+    /// <summary>
+    /// 主窗口上不响应右键。以前在画面上右键会弹出个带 "clear" 的菜单,点完窗口就没了,
+    /// 那是系统/控件自带的菜单,这里一律拦掉。
+    /// </summary>
+    private void Window_PreviewMouseRightButtonDown(object sender, MouseButtonEventArgs e)
+        => e.Handled = true;
 
     private void Window_KeyUp(object sender, KeyEventArgs e)
     {

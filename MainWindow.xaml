@@ -22,6 +22,7 @@
         UseLayoutRounding="True"
         KeyDown="Window_KeyDown"
         KeyUp="Window_KeyUp"
+        PreviewMouseRightButtonDown="Window_PreviewMouseRightButtonDown"
         Drop="Window_Drop"
         DragOver="Window_DragOver">
 
