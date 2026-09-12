@@ -22,7 +22,8 @@
         UseLayoutRounding="True"
         KeyDown="Window_KeyDown"
         KeyUp="Window_KeyUp"
-        PreviewMouseRightButtonDown="Window_PreviewMouseRightButtonDown"
+        PreviewMouseRightButtonUp="Window_PreviewMouseRightButtonUp"
+        ContextMenuService.IsEnabled="False"
         Drop="Window_Drop"
         DragOver="Window_DragOver">
 

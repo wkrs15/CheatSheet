@@ -1091,10 +1091,16 @@ public partial class MainWindow : Window
     }
 
     /// <summary>
-    /// 主窗口上不响应右键。以前在画面上右键会弹出个带 "clear" 的菜单,点完窗口就没了,
-    /// 那是系统/控件自带的菜单,这里一律拦掉。
+    /// 主窗口上不响应右键。
+    /// <para>
+    /// 那个冒出 "Clear" 的东西,来自 HandyControl 的 Growl 宿主(根 Grid 上的
+    /// GrowlParent)自带的上下文菜单 —— 它显示在宿主中央,所以看着像浮在画面中间。
+    /// 之前拦 MouseRightButtonDown 没用:WPF 的 ContextMenu 是
+    /// <b>MouseRightButtonUp</b> 触发的。这里改拦 Up,并在 XAML 上直接关掉整个窗口的
+    /// ContextMenuService,双保险。
+    /// </para>
     /// </summary>
-    private void Window_PreviewMouseRightButtonDown(object sender, MouseButtonEventArgs e)
+    private void Window_PreviewMouseRightButtonUp(object sender, MouseButtonEventArgs e)
         => e.Handled = true;
 
     private void Window_KeyUp(object sender, KeyEventArgs e)
