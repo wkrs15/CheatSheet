@@ -201,8 +201,8 @@ public partial class MainWindow : Window
     {
         if (WindowState == WindowState.Minimized)
         {
+            // 只把它显示出来,不抢前台 —— 不然按完这个键还得再点一下游戏。
             WindowState = WindowState.Normal;
-            Activate();
         }
         else
         {
@@ -320,8 +320,14 @@ public partial class MainWindow : Window
             return;
         }
 
+        IntPtr previous = GetForegroundWindow();
+
         var window = new SettingsWindow(this);
-        window.Closed += (_, _) => _settingsWindow = null;
+        window.Closed += (_, _) =>
+        {
+            _settingsWindow = null;
+            GiveBackFocus(previous);
+        };
         _settingsWindow = window;
         window.Show();
     }
@@ -433,6 +439,57 @@ public partial class MainWindow : Window
 
     /// <summary>右键菜单请求。整条拦掉 —— 见 WndProc 里的说明。</summary>
     private const int WM_CONTEXTMENU = 0x007B;
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr GetForegroundWindow();
+
+    [DllImport("user32.dll")]
+    private static extern bool SetForegroundWindow(IntPtr hWnd);
+
+    [DllImport("user32.dll")]
+    private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint pid);
+
+    [DllImport("kernel32.dll")]
+    private static extern uint GetCurrentThreadId();
+
+    [DllImport("user32.dll")]
+    private static extern bool AttachThreadInput(uint idAttach, uint idAttachTo, bool fAttach);
+
+    /// <summary>
+    /// 把前台焦点还给它原来的窗口。
+    /// <para>
+    /// 打开文件对话框、设置窗口这类操作会抢走前台,关掉之后焦点不会自己回到游戏,
+    /// 于是每次操作完还得再点一下游戏才能用键盘。这里在结束之后主动还回去。
+    /// 只还"别的进程"的窗口 —— 本来在自己家窗口之间切换就不用还。
+    /// </para>
+    /// </summary>
+    private static void GiveBackFocus(IntPtr hwnd)
+    {
+        if (hwnd == IntPtr.Zero)
+            return;
+
+        GetWindowThreadProcessId(hwnd, out uint pid);
+        if (pid == Environment.ProcessId)
+            return;
+
+        // SetForegroundWindow 有个限制:只有前台进程才有权设置前台窗口。
+        // 我们此刻八成已经不是前台了,所以先把自己和当前前台线程"接"在一起借个权限。
+        IntPtr fg = GetForegroundWindow();
+        uint fgThread = fg == IntPtr.Zero ? 0 : GetWindowThreadProcessId(fg, out _);
+        uint curThread = GetCurrentThreadId();
+
+        bool attached = fgThread != 0 && fgThread != curThread
+                        && AttachThreadInput(curThread, fgThread, true);
+        try
+        {
+            SetForegroundWindow(hwnd);
+        }
+        finally
+        {
+            if (attached)
+                AttachThreadInput(curThread, fgThread, false);
+        }
+    }
 
     /// <summary>把输入法与这个窗口解绑(见 OnSourceInitialized 的说明)。</summary>
     [DllImport("imm32.dll")]
@@ -834,8 +891,13 @@ public partial class MainWindow : Window
         if (!string.IsNullOrWhiteSpace(_settings.LastDirectory) && Directory.Exists(_settings.LastDirectory))
             dialog.InitialDirectory = _settings.LastDirectory;
 
+        IntPtr previous = GetForegroundWindow();
+
         if (dialog.ShowDialog(this) == true && dialog.FileNames.Length > 0)
             StartPlaylist(dialog.FileNames, 0);
+
+        // 对话框关掉后把前台还给游戏,省得每次选完片还得再点一下游戏。
+        GiveBackFocus(previous);
     }
 
     private void StartPlaylist(IReadOnlyList<string> files, int startIndex)
