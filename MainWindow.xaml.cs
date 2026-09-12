@@ -423,6 +423,9 @@ public partial class MainWindow : Window
 
     private const int WM_SIZING = 0x0214;
 
+    /// <summary>右键菜单请求。整条拦掉 —— 见 WndProc 里的说明。</summary>
+    private const int WM_CONTEXTMENU = 0x007B;
+
     // WM_SIZING 的 wParam:正在拖哪条边 / 哪个角
     private const int WMSZ_LEFT = 1;
     private const int WMSZ_RIGHT = 2;
@@ -474,6 +477,15 @@ public partial class MainWindow : Window
             var rc = Marshal.PtrToStructure<NativeRect>(lParam);
             ApplyAspectLock(ref rc, wParam.ToInt32());
             Marshal.StructureToPtr(rc, lParam, false);
+            return IntPtr.Zero;
+        }
+
+        // 右键菜单一律不弹:以前在画面上右键会冒出一个带 clear 的菜单,
+        // 点完整个视频窗口就没了(控制条还在)。那个菜单不是 WPF 层弹的,
+        // 所以除了 XAML 里的预览拦截,这里在 Win32 消息层再封一道。
+        if (msg == WM_CONTEXTMENU)
+        {
+            handled = true;
             return IntPtr.Zero;
         }
 
