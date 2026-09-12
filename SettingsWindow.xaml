@@ -7,7 +7,7 @@
         mc:Ignorable="d"
         d:DesignHeight="600" d:DesignWidth="580"
         Title="设置 · CheatSheet"
-        Width="580" Height="600"
+        Width="580" Height="680"
         MinWidth="520" MinHeight="440"
         WindowStartupLocation="CenterScreen"
         ShowInTaskbar="False"
@@ -109,6 +109,20 @@
                       Margin="0,12,0,0"
                       Content="拖动窗口边缘时保持等比例(按视频比例缩放)"
                       Click="Proportional_Click" />
+
+            <TextBlock Text="暂停时" Style="{StaticResource SectionTitle}" Margin="0,18,0,8" />
+
+            <RadioButton x:Name="PauseNothingBox" GroupName="PauseBehavior"
+                         Content="什么都不做"
+                         Margin="0,0,0,6"
+                         Checked="PauseBehavior_Changed" />
+            <RadioButton x:Name="PauseHideBox" GroupName="PauseBehavior"
+                         Content="隐藏视频窗口"
+                         Margin="0,0,0,6"
+                         Checked="PauseBehavior_Changed" />
+            <RadioButton x:Name="PauseDimBox" GroupName="PauseBehavior"
+                         Content="把画面调暗到 30%(推荐)"
+                         Checked="PauseBehavior_Changed" />
         </StackPanel>
 
         <DockPanel Grid.Row="1" Margin="0,20,0,0" LastChildFill="True">

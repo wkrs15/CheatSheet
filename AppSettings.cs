@@ -20,6 +20,12 @@ public sealed class AppSettings
     public double SpeedRatio { get; set; } = 1.0;
     public bool Loop { get; set; }
 
+    /// <summary>
+    /// 暂停时怎么处理播放窗口:0 = 什么都不做,1 = 隐藏窗口,2 = 把画面压暗到最低。
+    /// 默认 2 —— 暂停时画面自己退一边去,不挡着看游戏;继续播放时自动恢复。
+    /// </summary>
+    public int PauseBehavior { get; set; } = 2;
+
     /// <summary>拖动窗口边缘时是否按视频比例等比例缩放。</summary>
     public bool ProportionalResize { get; set; }
     public int SeekStepSeconds { get; set; } = 5;

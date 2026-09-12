@@ -61,6 +61,16 @@ public partial class MainWindow : Window
     private double _lastNonZeroVolume = 80;
     private string? _heldGesture;
     private bool _heldByButton;
+
+    /// <summary>当前画面变暗是"暂停压暗"造成的(不是用户自己调的值)。</summary>
+    private bool _pausedDimmed;
+
+    /// <summary>当前窗口隐藏是"暂停时隐藏"造成的(不是用户按热键藏的)。</summary>
+    private bool _pausedHidden;
+
+    /// <summary>窗口是不是被 Ctrl+Alt+T 藏起来的。用它判断而不是 WindowState ——
+    /// 隐藏走的是 SW_HIDE,窗口状态不再是最小化。</summary>
+    private bool _hiddenByHotkey;
     private double _speedBeforeHold = 1.0;
     private DateTime _seekHoldStart;
     private bool _seekHoldIsLongPress;
@@ -88,7 +98,11 @@ public partial class MainWindow : Window
         RestoreHotkeyGestures();
 
         _timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(200) };
-        _timer.Tick += (_, _) => RefreshProgress();
+        _timer.Tick += (_, _) =>
+        {
+            RefreshProgress();
+            UpdatePauseBehavior();
+        };
 
         // 全局热键只有"按下"事件(WM_HOTKEY),所以靠轮询 GetAsyncKeyState 判断是否松开。
         _holdTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(80) };
@@ -166,7 +180,59 @@ public partial class MainWindow : Window
             _isPlaying = true;
         }
 
+        UpdatePauseBehavior();
         RaiseStateChanged();
+    }
+
+    /// <summary>
+    /// 按设置把"暂停时"的效果加上/撤掉。轮询调用,所以状态判断都写成幂等的。
+    /// </summary>
+    private void UpdatePauseBehavior()
+    {
+        if (!_ready || Player is null)
+            return;
+
+        bool paused = !_isPlaying;
+        int behavior = _settings.PauseBehavior;
+
+        if (paused && behavior == 1 && !_pausedHidden)
+        {
+            // 用 SW_HIDE 而不是最小化:不动前台,游戏察觉不到。
+            _pausedHidden = true;
+            ShowWindow(new WindowInteropHelper(this).Handle, SW_HIDE);
+        }
+        else if (!paused && _pausedHidden)
+        {
+            _pausedHidden = false;
+            ShowWindow(new WindowInteropHelper(this).Handle, SW_SHOWNOACTIVATE);
+        }
+
+        if (paused && behavior == 2 && !_pausedDimmed)
+        {
+            _pausedDimmed = true;
+            ApplyOpacity(30);   // 30 = 设置里滑块的下限,也是 ApplyOpacity 自己的下限
+        }
+        else if ((!paused || behavior != 2) && _pausedDimmed)
+        {
+            _pausedDimmed = false;
+            ApplyOpacity(_settings.WindowOpacity * 100.0);
+        }
+    }
+
+    /// <summary>撤掉"暂停压暗 / 暂停隐藏"的临时效果,把画面和窗口都还原。</summary>
+    private void ResetPauseEffects()
+    {
+        if (_pausedDimmed)
+        {
+            _pausedDimmed = false;
+            ApplyOpacity(_settings.WindowOpacity * 100.0);
+        }
+
+        if (_pausedHidden)
+        {
+            _pausedHidden = false;
+            ShowWindow(new WindowInteropHelper(this).Handle, SW_SHOWNOACTIVATE);
+        }
     }
 
     internal void PlayPrevious() => PlayAt(_index - 1);
@@ -177,7 +243,34 @@ public partial class MainWindow : Window
 
     internal void SetSpeedIndex(int index) => ApplySpeed(index);
 
-    internal void SetOpacity(double percent) => ApplyOpacity(percent);
+    internal void SetOpacity(double percent)
+    {
+        // 记下用户真正想要的透明度。暂停时的临时压暗不能写进这里,
+        // 否则下次启动会以为用户要的就是那个暗值。
+        _settings.WindowOpacity = Math.Clamp(percent, 30, 100) / 100.0;
+        _pausedDimmed = false;
+        ApplyOpacity(percent);
+    }
+
+    /// <summary>
+    /// 暂停时怎么处理:0 = 什么都不做,1 = 隐藏窗口,2 = 把画面压暗到最低。
+    /// </summary>
+    internal int PauseBehavior
+    {
+        get => _settings.PauseBehavior;
+        set
+        {
+            if (_settings.PauseBehavior == value)
+                return;
+
+            _settings.PauseBehavior = value;
+
+            // 换了方案先把上一个方案的效果撤掉,再按新方案来。
+            ResetPauseEffects();
+            UpdatePauseBehavior();
+            RaiseStateChanged();
+        }
+    }
 
     internal void CycleSpeed() => ApplySpeed((GetSpeedIndex() + 1) % PlaybackSpeeds.Length);
 
@@ -222,18 +315,24 @@ public partial class MainWindow : Window
     /// <summary>显示 / 隐藏播放窗口(隐藏用最小化,这样任务栏还找得回来)。</summary>
     internal void ToggleWindowVisible()
     {
-        if (WindowState == WindowState.Minimized)
+        // 一律走 Win32,而且都是"不激活"的版本。
+        // <para>
+        // 以前用 WindowState = Minimized/Normal:恢复最小化窗口时 Windows 会把前台抢过去,
+        // 游戏收到 WM_KILLFOCUS 就把按键状态清了 —— 按住 A 走路时切一下窗口,人就走不动了,
+        // 得重按一次。还焦点也救不回来,因为"被抢"那一刻游戏已经收到了。
+        // SW_HIDE / SW_SHOWNOACTIVATE 则压根不动前台。
+        // </para>
+        IntPtr hwnd = new WindowInteropHelper(this).Handle;
+
+        if (_hiddenByHotkey)
         {
-            // 恢复最小化窗口时,Windows 会顺手把前台一起抢过来 ——
-            // 那样按完这个键还得再点一下游戏才能用键盘。这里取了旧前台,恢复后立刻还回去。
-            // (必须在这里取:等 RunHotkey 兜底时,前台已经变成我们自己了。)
-            IntPtr previous = GetForegroundWindow();
-            WindowState = WindowState.Normal;
-            GiveBackFocus(previous);
+            _hiddenByHotkey = false;
+            ShowWindow(hwnd, SW_SHOWNOACTIVATE);
         }
         else
         {
-            WindowState = WindowState.Minimized;
+            _hiddenByHotkey = true;
+            ShowWindow(hwnd, SW_HIDE);
         }
 
         RaiseStateChanged();
@@ -469,6 +568,15 @@ public partial class MainWindow : Window
 
     [DllImport("user32.dll")]
     private static extern IntPtr GetForegroundWindow();
+
+    [DllImport("user32.dll")]
+    private static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+
+    /// <summary>隐藏窗口,并且完全不碰前台(前台仍归游戏)。</summary>
+    private const int SW_HIDE = 0;
+
+    /// <summary>显示窗口但不激活它 —— 游戏收不到 WM_KILLFOCUS,正在按住的键不会被清掉。</summary>
+    private const int SW_SHOWNOACTIVATE = 4;
 
     [DllImport("user32.dll")]
     private static extern bool SetForegroundWindow(IntPtr hWnd);
@@ -801,7 +909,8 @@ public partial class MainWindow : Window
         }
 
         // 存的仍然是"画面透明度"(字段名沿用 WindowOpacity,旧配置照旧能读)。
-        _settings.WindowOpacity = VideoArea.Opacity;
+        // 注意:这里不能拿 VideoArea.Opacity 当用户设置 —— 暂停压暗时它是 30%,
+        // 写回去就等于把用户的透明度永久改掉了。用户改动由 SetOpacity 负责记录。
         _settings.Volume = _volumePercent / 100.0;
         _settings.SpeedRatio = GetSpeed();
 

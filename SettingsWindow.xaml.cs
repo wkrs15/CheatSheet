@@ -80,6 +80,19 @@ public partial class SettingsWindow : Window
                 SpeedBox.SelectedIndex = speedIndex;
 
             ProportionalBox.IsChecked = _main.ProportionalResize;
+
+            switch (_main.PauseBehavior)
+            {
+                case 0:
+                    PauseNothingBox.IsChecked = true;
+                    break;
+                case 1:
+                    PauseHideBox.IsChecked = true;
+                    break;
+                default:
+                    PauseDimBox.IsChecked = true;
+                    break;
+            }
         }
         finally
         {
@@ -126,6 +139,16 @@ public partial class SettingsWindow : Window
         _recordingAction = action;
         action.Status = "按下组合键…";
         e.Handled = true;
+    }
+
+    private void PauseBehavior_Changed(object sender, RoutedEventArgs e)
+    {
+        if (_syncing || !_initialized)
+            return;
+
+        _main.PauseBehavior = PauseNothingBox.IsChecked == true ? 0
+                            : PauseHideBox.IsChecked == true ? 1
+                            : 2;
     }
 
     private void Proportional_Click(object sender, RoutedEventArgs e)

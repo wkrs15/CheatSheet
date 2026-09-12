@@ -2,6 +2,8 @@ using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Input;
 using System.Windows.Interop;
+using System.Windows.Media;
+using System.Windows.Media.Animation;
 using System.Windows.Threading;
 
 namespace CheatSheet;
@@ -75,12 +77,21 @@ public partial class ControlBarWindow : Window
     private bool _syncing;
     private bool _visible = true;
 
+    /// <summary>出现 / 收起时的竖向位移(淡入淡出的同时在动这一项)。</summary>
+    private readonly TranslateTransform _slide = new();
+
+    private static readonly Duration FadeIn = TimeSpan.FromMilliseconds(150);
+    private static readonly Duration FadeOut = TimeSpan.FromMilliseconds(120);
+    private static readonly Duration SlideIn = TimeSpan.FromMilliseconds(180);
+
     public ControlBarWindow(MainWindow main)
     {
         ArgumentNullException.ThrowIfNull(main);
 
         _main = main;
         InitializeComponent();
+
+        RenderTransform = _slide;
 
         _main.StateChanged += OnMainStateChanged;
 
@@ -159,8 +170,39 @@ public partial class ControlBarWindow : Window
         _visible = visible;
 
         // 窗口一直存在,只是不显示 —— 靠轮询光标随时把它叫回来。
-        Visibility = visible ? Visibility.Visible : Visibility.Hidden;
-        Opacity = 1;
+        // 出现 / 收起都带过渡:淡入淡出 + 一点点纵向滑动,别生硬地闪出来。
+        if (visible)
+        {
+            Visibility = Visibility.Visible;
+
+            BeginAnimation(OpacityProperty, new DoubleAnimation(0, 1, FadeIn)
+            {
+                EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut }
+            });
+
+            _slide.BeginAnimation(TranslateTransform.YProperty, new DoubleAnimation(-10, 0, SlideIn)
+            {
+                EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut }
+            });
+        }
+        else
+        {
+            var fade = new DoubleAnimation(1, 0, FadeOut)
+            {
+                EasingFunction = new CubicEase { EasingMode = EasingMode.EaseIn }
+            };
+
+            // 淡出播完才真正隐藏,否则动画根本看不到。
+            fade.Completed += (_, _) =>
+            {
+                // 把动画停掉、值落到属性上,免得下次动画的起点不对。
+                BeginAnimation(OpacityProperty, null);
+                Opacity = 0;
+                Visibility = Visibility.Hidden;
+            };
+
+            BeginAnimation(OpacityProperty, fade);
+        }
     }
 
     private void OnMainStateChanged(object? sender, EventArgs e) => Sync();
