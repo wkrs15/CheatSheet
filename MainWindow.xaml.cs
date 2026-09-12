@@ -192,7 +192,9 @@ public partial class MainWindow : Window
         if (!_ready || Player is null)
             return;
 
-        bool paused = !_isPlaying;
+        // 没打开视频时不算"暂停" —— 否则程序一启动(还没播任何东西)就会把画面压暗,
+        // 选"隐藏视频窗口"的话更狠:窗口直接不见。
+        bool paused = Player.Source is not null && !_isPlaying;
         int behavior = _settings.PauseBehavior;
 
         if (paused && behavior == 1 && !_pausedHidden)
