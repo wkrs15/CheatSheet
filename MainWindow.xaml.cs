@@ -71,16 +71,17 @@ public partial class MainWindow : Window
 
         _settings = AppSettings.Load();
 
-        // 保留的全局热键:播放、快退、快进、置顶、透明度 ±。
+        // 保留的全局热键:播放、快退、快进、显示/隐藏窗口、透明度 ±。
         // 快退/快进走 BeginSeekHold —— 点一下跳 5 秒,按住则是 2 倍速播放。
+        // 全部都包在 RunHotkey 里 —— 它会保证动作执行完把前台还给游戏。
         _hotkeyActions = new List<HotkeyAction>
         {
-            new("PlayPause", "播放 / 暂停", "Ctrl+Alt+Space", TogglePlayPause),
-            new("SeekBack", "快退(按住 2 倍速)", "Ctrl+Alt+Left", () => BeginSeekHold("SeekBack", -1)),
-            new("SeekForward", "快进(按住 2 倍速)", "Ctrl+Alt+Right", () => BeginSeekHold("SeekForward", 1)),
-            new("WindowVisible", "显示 / 隐藏播放窗口", "Ctrl+Alt+T", ToggleWindowVisible),
-            new("OpacityDown", "透明度 -", "Ctrl+Alt+Z", () => ChangeOpacity(-10)),
-            new("OpacityUp", "透明度 +", "Ctrl+Alt+X", () => ChangeOpacity(10)),
+            new("PlayPause", "播放 / 暂停", "Ctrl+Alt+Space", () => RunHotkey(TogglePlayPause)),
+            new("SeekBack", "快退(按住 2 倍速)", "Ctrl+Alt+Left", () => RunHotkey(() => BeginSeekHold("SeekBack", -1))),
+            new("SeekForward", "快进(按住 2 倍速)", "Ctrl+Alt+Right", () => RunHotkey(() => BeginSeekHold("SeekForward", 1))),
+            new("WindowVisible", "显示 / 隐藏播放窗口", "Ctrl+Alt+T", () => RunHotkey(ToggleWindowVisible)),
+            new("OpacityDown", "透明度 -", "Ctrl+Alt+Z", () => RunHotkey(() => ChangeOpacity(-10))),
+            new("OpacityUp", "透明度 +", "Ctrl+Alt+X", () => RunHotkey(() => ChangeOpacity(10))),
         };
 
         ApplySettings();
@@ -196,13 +197,39 @@ public partial class MainWindow : Window
         }
     }
 
+    /// <summary>
+    /// 热键动作的统一入口:执行前后台是谁,执行完就还给谁。
+    /// <para>
+    /// 按热键本来不该动前台,但有些动作会顺手把我们的窗口激活(或弹出对话框),
+    /// 结果就是"按完热键还得再点一下游戏才能用键盘"。这里统一兜住。
+    /// 只还"别的进程"的窗口,所以自己家窗口之间切换不受影响。
+    /// </para>
+    /// </summary>
+    private void RunHotkey(Action action)
+    {
+        IntPtr previous = GetForegroundWindow();
+
+        try
+        {
+            action();
+        }
+        finally
+        {
+            GiveBackFocus(previous);
+        }
+    }
+
     /// <summary>显示 / 隐藏播放窗口(隐藏用最小化,这样任务栏还找得回来)。</summary>
     internal void ToggleWindowVisible()
     {
         if (WindowState == WindowState.Minimized)
         {
-            // 只把它显示出来,不抢前台 —— 不然按完这个键还得再点一下游戏。
+            // 恢复最小化窗口时,Windows 会顺手把前台一起抢过来 ——
+            // 那样按完这个键还得再点一下游戏才能用键盘。这里取了旧前台,恢复后立刻还回去。
+            // (必须在这里取:等 RunHotkey 兜底时,前台已经变成我们自己了。)
+            IntPtr previous = GetForegroundWindow();
             WindowState = WindowState.Normal;
+            GiveBackFocus(previous);
         }
         else
         {
