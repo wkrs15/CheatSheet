@@ -1,0 +1,17 @@
+# 构建产物
+bin/
+obj/
+
+# 本地用户设置 / VS
+.vs/
+*.user
+*.suo
+
+# 工作区里那份 fork 文档(体积大,不是本项目源码)
+ghost1372.github.io-master/
+
+# 其它
+*.log
+
+# Reasonix 会话日志(工具运行记录,不属于项目)
+.reasonix/

@@ -1,0 +1,115 @@
+<Window x:Class="CheatSheet.ControlBarWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        mc:Ignorable="d"
+        d:DesignHeight="42" d:DesignWidth="780"
+        Title="CheatSheet · 控制条"
+        WindowStyle="None"
+        AllowsTransparency="True"
+        Background="Transparent"
+        ResizeMode="NoResize"
+        ShowInTaskbar="False"
+        ShowActivated="False"
+        Topmost="True"
+        SizeToContent="WidthAndHeight"
+        WindowStartupLocation="Manual"
+        FontFamily="Microsoft YaHei UI"
+        FontSize="12"
+        Foreground="#F2FFFFFF"
+        TextOptions.TextFormattingMode="Display"
+        UseLayoutRounding="True">
+    <Window.Resources>
+        <!-- 深色条上的按钮:自己画模板,不受浅色主题影响 -->
+        <Style x:Key="BarButton" TargetType="Button">
+            <Setter Property="Width" Value="34" />
+            <Setter Property="Height" Value="30" />
+            <Setter Property="Margin" Value="1,0" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="FontFamily" Value="Segoe MDL2 Assets" />
+            <Setter Property="FontSize" Value="14" />
+            <Setter Property="Foreground" Value="#F2FFFFFF" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Focusable" Value="False" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bd" Background="{TemplateBinding Background}" CornerRadius="6">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="#33FFFFFF" />
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="#55FFFFFF" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="BarTextButton" TargetType="Button" BasedOn="{StaticResource BarButton}">
+            <Setter Property="FontFamily" Value="Segoe UI" />
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="Width" Value="46" />
+        </Style>
+
+        <Style x:Key="BarSeparator" TargetType="Border">
+            <Setter Property="Width" Value="1" />
+            <Setter Property="Margin" Value="6,6" />
+            <Setter Property="Background" Value="#33FFFFFF" />
+        </Style>
+    </Window.Resources>
+
+    <Border Background="#E615171B"
+            BorderBrush="#33FFFFFF"
+            BorderThickness="0,0,1,1"
+            CornerRadius="0,0,14,14"
+            Padding="10,4">
+        <StackPanel Orientation="Horizontal">
+            <TextBlock x:Name="TitleText"
+                       MaxWidth="190"
+                       Margin="4,0,2,0"
+                       VerticalAlignment="Center"
+                       TextTrimming="CharacterEllipsis"
+                       Foreground="#B3FFFFFF"
+                       Text="把视频拖到这里开始播放" />
+
+            <Border Style="{StaticResource BarSeparator}" />
+
+            <Button Style="{StaticResource BarButton}" Content="&#xE8E5;" Click="Open_Click" ToolTip="打开视频文件" />
+            <Button Style="{StaticResource BarButton}" Content="&#xE892;" Click="Previous_Click" ToolTip="上一集" />
+            <Button x:Name="PlayButton" Style="{StaticResource BarButton}" Content="&#xE768;" Click="PlayPause_Click" ToolTip="播放 / 暂停  (Ctrl+Alt+Space)" />
+            <Button Style="{StaticResource BarButton}" Content="&#xE893;" Click="Next_Click" ToolTip="下一集" />
+            <Button Style="{StaticResource BarTextButton}" Content="-5s"
+                    PreviewMouseLeftButtonDown="Rewind_Press"
+                    PreviewMouseLeftButtonUp="Rewind_Release"
+                    ToolTip="快退 5 秒(按住 = 2 倍速,松开恢复)" />
+            <Button Style="{StaticResource BarTextButton}" Content="+5s"
+                    PreviewMouseLeftButtonDown="Forward_Press"
+                    PreviewMouseLeftButtonUp="Forward_Release"
+                    ToolTip="快进 5 秒(按住 = 2 倍速,松开恢复)" />
+
+            <Border Style="{StaticResource BarSeparator}" />
+
+            <Button x:Name="SpeedButton" Style="{StaticResource BarTextButton}" Content="1x" Click="Speed_Click" ToolTip="播放倍速:点一下换下一档" />
+            <Button x:Name="MuteButton" Style="{StaticResource BarButton}" Content="&#xE767;" Click="Mute_Click" ToolTip="静音" />
+            <Slider x:Name="VolumeSlider"
+                    Width="80" Height="22" Margin="4,0"
+                    Minimum="0" Maximum="100" Value="80"
+                    VerticalAlignment="Center"
+                    ValueChanged="Volume_ValueChanged"
+                    ToolTip="音量" />
+
+            <Border Style="{StaticResource BarSeparator}" />
+
+            <Button x:Name="PinButton" Style="{StaticResource BarButton}" Content="&#xE718;" Click="Pin_Click" ToolTip="播放窗口置顶  (Ctrl+Alt+T)" />
+            <Button Style="{StaticResource BarButton}" Content="&#xE713;" Click="Settings_Click" ToolTip="设置:改快捷键 / 透明度 / 音量 / 倍速" />
+            <Button Style="{StaticResource BarButton}" Content="&#xE8BB;" Click="Exit_Click" ToolTip="退出 CheatSheet" />
+        </StackPanel>
+    </Border>
+</Window>

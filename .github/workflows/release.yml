@@ -1,0 +1,58 @@
+name: Release
+
+# 推 v* 标签时自动构建并发布 Release;也可以手动触发一次构建(不会发 Release)。
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Restore
+        run: dotnet restore CheatSheet.csproj
+
+      - name: Build
+        run: dotnet build CheatSheet.csproj -c Release --no-restore
+
+      - name: Publish (win-x64)
+        run: dotnet publish CheatSheet.csproj -c Release -r win-x64 --self-contained false -o publish
+
+      - name: Package
+        shell: pwsh
+        run: |
+          $name = "CheatSheet-${{ github.ref_name }}-win-x64.zip"
+          Compress-Archive -Path publish/* -DestinationPath $name
+          Write-Host "打包完成: $name"
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: CheatSheet-win-x64
+          path: CheatSheet-*-win-x64.zip
+
+      # 只有推标签时才发 Release
+      - name: Publish to Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          name: CheatSheet ${{ github.ref_name }}
+          files: CheatSheet-*-win-x64.zip
+          generate_release_notes: true
+          draft: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

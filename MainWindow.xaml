@@ -1,0 +1,146 @@
+﻿<Window x:Class="CheatSheet.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:hc="https://handyorg.github.io/handycontrol"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        mc:Ignorable="d"
+        d:DesignHeight="460" d:DesignWidth="800"
+        Title="CheatSheet"
+        Width="800" Height="460"
+        MinWidth="420" MinHeight="240"
+        WindowStartupLocation="CenterScreen"
+        WindowStyle="None"
+        AllowsTransparency="True"
+        Background="Transparent"
+        ResizeMode="CanResize"
+        AllowDrop="True"
+        FontFamily="Microsoft YaHei UI"
+        FontSize="12"
+        Foreground="{DynamicResource PrimaryTextBrush}"
+        TextOptions.TextFormattingMode="Display"
+        UseLayoutRounding="True"
+        KeyDown="Window_KeyDown"
+        KeyUp="Window_KeyUp"
+        Drop="Window_Drop"
+        DragOver="Window_DragOver">
+
+    <!-- 注意:这里刻意不用 WindowChrome。WindowChrome 与 AllowsTransparency 同用时,
+         窗口尺寸会变成"由内容测量",结果被 MinWidth/MinHeight 顶到最小尺寸,
+         Width/Height 完全不生效。画面透明度需要分层透明窗口,所以让位给尺寸正确性。 -->
+
+    <!-- 整个窗口就是一块画面:进度条浮在画面底部,左右顶到窗口两边。
+         透明度统一由 VideoArea 控制,所以画面与进度条是一起淡的。 -->
+    <Window.Resources>
+        <!-- 自己画进度条:HandyControl 的 Slider 样式在轨道两端留了白,这里让轨道真正顶到两边。
+             Thumb 在 0% / 100% 时完全落在轨道内,所以左右都不会有缺口。 -->
+        <Style x:Key="FullWidthProgress" TargetType="Slider">
+            <Setter Property="Height" Value="12" />
+            <Setter Property="Focusable" Value="False" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Slider">
+                        <Grid Background="Transparent">
+                            <Border Height="3" VerticalAlignment="Bottom" Background="#73FFFFFF" CornerRadius="1.5" />
+                            <!-- 轨道左右各溢出 8px(=滑块半宽):滑块中心因此正好落在真实进度上,
+                                 而滑块本身能有 16px 命中区,不至于拖不动。 -->
+                            <Track x:Name="PART_Track" Margin="-8,0,-8,0">
+                                <Track.DecreaseRepeatButton>
+                                    <RepeatButton Command="Slider.DecreaseLarge" Focusable="False">
+                                        <RepeatButton.Template>
+                                            <ControlTemplate TargetType="RepeatButton">
+                                                <Border Height="3" VerticalAlignment="Bottom" Background="#FF2E90FF" CornerRadius="1.5" />
+                                            </ControlTemplate>
+                                        </RepeatButton.Template>
+                                    </RepeatButton>
+                                </Track.DecreaseRepeatButton>
+                                <Track.IncreaseRepeatButton>
+                                    <RepeatButton Command="Slider.IncreaseLarge" Focusable="False">
+                                        <RepeatButton.Template>
+                                            <ControlTemplate TargetType="RepeatButton">
+                                                <Border Background="Transparent" />
+                                            </ControlTemplate>
+                                        </RepeatButton.Template>
+                                    </RepeatButton>
+                                </Track.IncreaseRepeatButton>
+                                <Track.Thumb>
+                                    <!-- 命中框收成 1px:这样它的位置就等于真实进度。
+                                         看得见的圆点是下面那个 ProgressDot,位置由代码精确计算,
+                                         所以圆点中心始终压在真实进度上。 -->
+                                    <Thumb Width="16" Height="16">
+                                        <Thumb.Template>
+                                            <ControlTemplate TargetType="Thumb">
+                                                <Ellipse Width="12" Height="12" Fill="White"
+                                                         HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                            </ControlTemplate>
+                                        </Thumb.Template>
+                                    </Thumb>
+                                </Track.Thumb>
+                            </Track>
+                        </Grid>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Window.Resources>
+
+    <Grid hc:Growl.GrowlParent="True" Background="Transparent">
+        <Grid x:Name="VideoArea"
+              Background="Black"
+              ClipToBounds="True"
+              MouseLeftButtonDown="Video_MouseLeftButtonDown"
+              MouseMove="Video_MouseMove"
+              MouseWheel="Video_MouseWheel">
+            <MediaElement x:Name="Player"
+                          LoadedBehavior="Manual"
+                          ScrubbingEnabled="True"
+                          Stretch="Uniform"
+                          Volume="0.8"
+                          MediaOpened="Player_MediaOpened"
+                          MediaEnded="Player_MediaEnded"
+                          MediaFailed="Player_MediaFailed" />
+            <TextBlock x:Name="HintText"
+                       Text="把视频文件拖到这里 · 或点屏幕正上方控制条的打开按钮"
+                       Foreground="#80FFFFFF"
+                       FontSize="14"
+                       HorizontalAlignment="Center"
+                       VerticalAlignment="Center"
+                       IsHitTestVisible="False" />
+
+            <!-- 进度条:贴底、左右不留白;时间叠在它右端的上方,不挡进度条。
+                 底部留 8px:窗口边缘 7px 是"拖边调整大小"的感应区,别和进度条抢鼠标。 -->
+            <Border x:Name="BottomBar"
+                    VerticalAlignment="Bottom"
+                    Background="Transparent"
+                    Padding="0">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+
+                    <TextBlock x:Name="TimeText"
+                               Grid.Row="0"
+                               Margin="0,3,8,2"
+                               HorizontalAlignment="Right"
+                               FontFamily="Consolas"
+                               Foreground="#E6FFFFFF"
+                               Text="--:-- / --:--" />
+
+                    <Slider x:Name="ProgressSlider"
+                            Grid.Row="1"
+                            Style="{StaticResource FullWidthProgress}"
+                            Minimum="0" Maximum="100" Value="0"
+                            Margin="0" Padding="0"
+                            HorizontalAlignment="Stretch"
+                            VerticalAlignment="Center"
+                            IsMoveToPointEnabled="True"
+                            Thumb.DragStarted="Progress_DragStarted"
+                            Thumb.DragCompleted="Progress_DragCompleted"
+                            ValueChanged="Progress_ValueChanged" />
+
+                </Grid>
+            </Border>
+        </Grid>
+    </Grid>
+</Window>
