@@ -426,6 +426,10 @@ public partial class MainWindow : Window
     /// <summary>右键菜单请求。整条拦掉 —— 见 WndProc 里的说明。</summary>
     private const int WM_CONTEXTMENU = 0x007B;
 
+    /// <summary>把输入法与这个窗口解绑(见 OnSourceInitialized 的说明)。</summary>
+    [DllImport("imm32.dll")]
+    private static extern IntPtr ImmAssociateContext(IntPtr hWnd, IntPtr hIMC);
+
     // WM_SIZING 的 wParam:正在拖哪条边 / 哪个角
     private const int WMSZ_LEFT = 1;
     private const int WMSZ_RIGHT = 2;
@@ -449,8 +453,15 @@ public partial class MainWindow : Window
     {
         base.OnSourceInitialized(e);
 
-        HwndSource? source = HwndSource.FromHwnd(new WindowInteropHelper(this).Handle);
+        IntPtr hwnd = new WindowInteropHelper(this).Handle;
+
+        HwndSource? source = HwndSource.FromHwnd(hwnd);
         source?.AddHook(WndProc);
+
+        // 这个窗口不接受文字输入,把输入法(IME)从它身上摘掉。
+        // 否则像讯飞这类输入法会把自己的悬浮工具条挂到画面上,
+        // 表现就是"右键一下冒出个 Clear"。解绑后它们就不会再来了。
+        ImmAssociateContext(hwnd, IntPtr.Zero);
     }
 
     /// <summary>
