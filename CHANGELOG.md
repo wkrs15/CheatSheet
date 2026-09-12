@@ -8,7 +8,7 @@
 格式沿用 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号沿用 [语义化版本](https://semver.org/lang/zh-CN/)。
 
-## [v0.4] - 未发布
+## [v0.4] - 2026-09-12
 
 ### 新增
 
