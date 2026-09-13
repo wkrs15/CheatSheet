@@ -26,12 +26,9 @@
     <path d="M314 163 V219 Q314 231 326 231 H382 Z" fill="#D7E1EF"/>
     <path d="M314 163 L382 231" stroke="#C3D2E4" stroke-width="3" fill="none"/>
 
-    <!-- 批改的红对勾:答案是对的 -->
-    <path d="M167 200 l14 11 22 -22" fill="none" stroke="#E5484D"
-          stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
     <!-- 涂写的字迹 -->
-    <path d="M164 228 H298" stroke="#A9B7C9" stroke-width="14" stroke-linecap="round"/>
-    <path d="M164 270 H246" stroke="#A9B7C9" stroke-width="14" stroke-linecap="round"/>
+    <path d="M164 208 H298" stroke="#A9B7C9" stroke-width="14" stroke-linecap="round"/>
+    <path d="M164 250 H246" stroke="#A9B7C9" stroke-width="14" stroke-linecap="round"/>
     <!-- 答案就是视频:蓝色播放键 -->
     <path d="M228 284 L288 314 L228 344 Z" fill="#2E90FF"
           stroke="#2E90FF" stroke-width="12" stroke-linejoin="round"/>
