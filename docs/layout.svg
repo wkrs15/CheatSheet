@@ -1,0 +1,74 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 470" width="900" height="470" role="img"
+     aria-label="CheatSheet 界面示意:屏幕顶端的控制条 + 压在游戏画面上的置顶小窗">
+  <defs>
+    <!-- 自己带一套深浅色,不跟着 GitHub 的明暗主题变 -->
+    <style>
+      text { font-family: "Microsoft YaHei UI", "Microsoft YaHei", "Segoe UI", system-ui, sans-serif; }
+      .label { fill: #8b96a3; font-size: 14px; }
+      .hint  { fill: #5b6570; font-size: 13px; }
+      .name  { fill: #cfd8e3; font-size: 15px; font-weight: 600; }
+      .url   { fill: #6d7885; font-size: 12px; }
+      .btn   { fill: #262d37; }
+      .dot   { fill: #2e90ff; }
+    </style>
+  </defs>
+
+  <rect x="0" y="0" width="900" height="470" rx="16" fill="#0e1116"/>
+
+  <!-- ================= 屏幕最顶端:控制条 ================= -->
+  <text class="label" x="40" y="30">屏幕最顶端</text>
+
+  <rect x="40" y="42" width="820" height="80" rx="14" fill="#171b21" stroke="#2a313a"/>
+
+  <!-- 地址栏那一行(切到网页模式才出现) -->
+  <rect x="58" y="56" width="520" height="22" rx="6" fill="#212731"/>
+  <text class="url" x="70" y="72">https://www.bilibili.com</text>
+  <rect x="586" y="56" width="46" height="22" rx="6" fill="#2b323d"/>
+  <text class="url" x="599" y="72">前往</text>
+
+  <!-- 按钮行 -->
+  <rect class="btn" x="58"  y="88" width="30" height="22" rx="6"/>
+  <rect class="btn" x="92"  y="88" width="30" height="22" rx="6"/>
+  <rect class="btn" x="126" y="88" width="30" height="22" rx="6"/>
+  <rect class="btn" x="160" y="88" width="30" height="22" rx="6"/>
+  <rect class="btn" x="194" y="88" width="30" height="22" rx="6"/>
+  <rect class="btn" x="228" y="88" width="30" height="22" rx="6"/>
+  <rect class="btn" x="270" y="88" width="40" height="22" rx="6"/>
+  <rect x="318" y="93" width="80" height="12" rx="6" fill="#2b323d"/>
+  <circle cx="338" cy="99" r="6" fill="#c7d0da"/>
+  <rect class="btn" x="800" y="88" width="30" height="22" rx="6"/>
+  <rect class="btn" x="834" y="88" width="26" height="22" rx="6"/>
+
+  <text class="hint" x="40" y="142">控制条:鼠标移到屏幕顶端才出现 · 点它不抢游戏焦点 · 切到网页模式时上面多一行地址栏</text>
+
+  <!-- ================= 游戏画面 ================= -->
+  <rect x="40" y="162" width="430" height="272" rx="14" fill="#14181d" stroke="#232a33" stroke-dasharray="7 6"/>
+  <text class="hint" x="60" y="190">游戏画面(可以全屏)</text>
+
+  <!-- 压在上面的置顶小窗 -->
+  <rect x="68" y="200" width="344" height="198" rx="10" fill="#05070a" stroke="#3a424c"/>
+  <path d="M225 284 l30 15 -30 15 z" fill="#1d242c"/>
+
+  <!-- 贴着小窗底边的进度条 -->
+  <rect x="76" y="392" width="328" height="3" rx="1.5" fill="#ffffff2b"/>
+  <rect x="76" y="392" width="96" height="3" rx="1.5" fill="#2e90ff"/>
+  <circle cx="172" cy="393.5" r="5" fill="#ffffff"/>
+
+  <!-- ================= 说明 ================= -->
+  <text class="name" x="520" y="216">置顶小窗</text>
+
+  <circle class="dot" cx="526" cy="252" r="3"/>
+  <text class="label" x="540" y="257">只有画面 + 贴着底边的进度条,没有标题栏</text>
+
+  <circle class="dot" cx="526" cy="290" r="3"/>
+  <text class="label" x="540" y="295">画面可以半透明,透出后面的游戏</text>
+
+  <circle class="dot" cx="526" cy="328" r="3"/>
+  <text class="label" x="540" y="333">按住画面拖动 = 移动窗口,拖边角 = 缩放</text>
+
+  <circle class="dot" cx="526" cy="366" r="3"/>
+  <text class="label" x="540" y="371">全局热键在游戏全屏时照样生效</text>
+
+  <circle class="dot" cx="526" cy="404" r="3"/>
+  <text class="label" x="540" y="409">同一块画面也能切成内置浏览器看网页</text>
+</svg>
