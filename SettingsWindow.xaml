@@ -47,7 +47,31 @@
         </Grid.RowDefinitions>
 
         <StackPanel Grid.Row="0">
-            <TextBlock Text="显示与声音" Style="{StaticResource SectionTitle}" />
+            <TextBlock Text="播放模式" Style="{StaticResource SectionTitle}" />
+
+            <RadioButton x:Name="VideoModeBox" GroupName="PlayMode"
+                         Content="本地视频模式(播放视频文件)"
+                         Margin="0,0,0,6"
+                         Checked="PlayMode_Changed" />
+            <RadioButton x:Name="WebModeBox" GroupName="PlayMode"
+                         Content="浏览器模式(播放网页视频,如 B 站)"
+                         Checked="PlayMode_Changed" />
+
+            <Grid Margin="0,10,0,0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="96" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <TextBlock Text="浏览器首页" Style="{StaticResource SettingCaption}" />
+                <hc:TextBox x:Name="HomeUrlBox"
+                            Grid.Column="1"
+                            Height="26"
+                            VerticalContentAlignment="Center"
+                            TextChanged="HomeUrl_Changed"
+                            ToolTip="浏览器模式启动时打开的网址" />
+            </Grid>
+
+            <TextBlock Text="显示与声音" Style="{StaticResource SectionTitle}" Margin="0,18,0,10" />
 
             <Grid>
                 <Grid.ColumnDefinitions>

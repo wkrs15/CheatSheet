@@ -92,6 +92,7 @@ public partial class MainWindow : Window
             new("WindowVisible", "显示 / 隐藏播放窗口", "Ctrl+Alt+T", () => RunHotkey(ToggleWindowVisible)),
             new("OpacityDown", "透明度 -", "Ctrl+Alt+Z", () => RunHotkey(() => ChangeOpacity(-10))),
             new("OpacityUp", "透明度 +", "Ctrl+Alt+X", () => RunHotkey(() => ChangeOpacity(10))),
+            new("WebMode", "视频 / 网页模式切换", "Ctrl+Alt+B", () => RunHotkey(ToggleWebMode)),
         };
 
         ApplySettings();
@@ -100,6 +101,8 @@ public partial class MainWindow : Window
         _timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(200) };
         _timer.Tick += (_, _) =>
         {
+            // 网页模式下 RefreshProgress 是空转,真正要看的是页面里那个 <video> 的状态。
+            PollWebState();
             RefreshProgress();
             UpdatePauseBehavior();
         };
@@ -127,7 +130,11 @@ public partial class MainWindow : Window
     /// <summary>控制条与设置窗口订阅这个事件来刷新自己的界面(与 <see cref="Window.StateChanged"/> 无关,故用 new 隐藏)。</summary>
     internal new event EventHandler? StateChanged;
 
-    internal bool IsPlaying => _isPlaying;
+    /// <summary>
+    /// "正在播放"。两种模式各有一套播放状态,对外必须统一 ——
+    /// 控制条的播放图标、"暂停时"行为、长按快进是否算点按,都靠它判断。
+    /// </summary>
+    internal bool IsPlaying => _webMode ? _webVideoPlaying : _isPlaying;
 
     internal bool IsMuted => _muted;
 
@@ -163,6 +170,13 @@ public partial class MainWindow : Window
         if (!_ready)
             return;
 
+        // 网页模式下这个键控制页面里的 <video>。
+        if (_webMode)
+        {
+            WebTogglePlayPause();
+            return;
+        }
+
         // 还没打开任何文件时什么都不做。
         // (以前这里会直接弹文件对话框"少一次点击",但把播放键绑成单键 Up 之后,
         //  按它就弹打开文件,很容易让人误以为这个键的功能是"打开文件"。)
@@ -194,7 +208,12 @@ public partial class MainWindow : Window
 
         // 没打开视频时不算"暂停" —— 否则程序一启动(还没播任何东西)就会把画面压暗,
         // 选"隐藏视频窗口"的话更狠:窗口直接不见。
-        bool paused = Player.Source is not null && !_isPlaying;
+        // 网页模式同理:页面上还没有 <video>、或者有但一次都没播过,都不算暂停。
+        bool hasSource = _webMode
+            ? _webHasVideo && _webPlayedOnce
+            : Player.Source is not null;
+
+        bool paused = hasSource && !IsPlaying;
         int behavior = _settings.PauseBehavior;
 
         if (paused && behavior == 1 && !_pausedHidden)
@@ -381,7 +400,10 @@ public partial class MainWindow : Window
 
         // 手势从动作表里取,这样用户在设置里改过键也能正确判断"松开"。
         _heldGesture = _hotkeyActions.FirstOrDefault(a => a.Key == actionKey)?.Gesture;
-        _speedBeforeHold = GetSpeed();
+
+        // 还原到"按住之前"的倍速:网页模式下实际倍速在页面里(可能被 B 站自己改过),
+        // 所以以轮询到的值为准。
+        _speedBeforeHold = _webMode && _webSpeed > 0.01 ? _webSpeed : GetSpeed();
 
         _holdTimer.Start();
     }
@@ -413,7 +435,9 @@ public partial class MainWindow : Window
         if (!stillHeld)
         {
             // 没到长按阈值就松开 = 点按,这时候才跳那一步;没在播放时也按点按处理。
-            bool wasTap = !_seekHoldIsLongPress || !_isPlaying;
+            // IsPlaying 是模式感知的 —— 以前这里直接看本地的 _isPlaying,而网页模式下它恒为
+            // false,于是"长按 2 倍速"永远被当成点按(倍速根本切不上去,松开时也不会还原)。
+            bool wasTap = !_seekHoldIsLongPress || !IsPlaying;
 
             _heldByButton = false;
             EndSeekHold();
@@ -429,12 +453,26 @@ public partial class MainWindow : Window
 
         _seekHoldIsLongPress = true;
 
-        if (_isPlaying)
+        if (IsPlaying)
             SetPlaybackSpeed(HoldSpeedRatio);
     }
 
+    /// <summary>
+    /// 改播放倍速。两种模式各改各的:本地视频改 <c>MediaElement.SpeedRatio</c>,
+    /// 网页模式改页面里 &lt;video&gt; 的 <c>playbackRate</c>。
+    /// </summary>
     private void SetPlaybackSpeed(double ratio)
     {
+        if (_webMode)
+        {
+            WebSetSpeed(ratio);
+
+            // 网页模式下画面被浏览器接管、进度条也收起来了,用户看不到任何反馈,
+            // 长按快进会显得"没反应",所以给一条提示。
+            Growl.Info($"网页倍速 {ratio:0.##}x", "webspeed");
+            return;
+        }
+
         if (Player is not null)
             Player.SpeedRatio = ratio;
     }
@@ -515,6 +553,10 @@ public partial class MainWindow : Window
         _controlBar.Show();
         _controlBar.Reposition();
 
+        // 上次停在网页模式的话切回网页模式。
+        if (_settings.WebMode)
+            EnterWebMode();
+
         RaiseStateChanged();
     }
 
@@ -524,6 +566,7 @@ public partial class MainWindow : Window
         _holdTimer.Stop();
         _hotkeys?.Dispose();
         SaveSettings();
+        DisposeWeb();
 
         _settingsWindow?.Close();
         _settingsWindow = null;
@@ -600,7 +643,7 @@ public partial class MainWindow : Window
     /// 只还"别的进程"的窗口 —— 本来在自己家窗口之间切换就不用还。
     /// </para>
     /// </summary>
-    private static void GiveBackFocus(IntPtr hwnd)
+    internal static void GiveBackFocus(IntPtr hwnd)
     {
         if (hwnd == IntPtr.Zero)
             return;
@@ -609,8 +652,22 @@ public partial class MainWindow : Window
         if (pid == Environment.ProcessId)
             return;
 
-        // SetForegroundWindow 有个限制:只有前台进程才有权设置前台窗口。
-        // 我们此刻八成已经不是前台了,所以先把自己和当前前台线程"接"在一起借个权限。
+        ForceForeground(hwnd);
+    }
+
+    /// <summary>
+    /// 强行把前台交给某个窗口。
+    /// <para>
+    /// SetForegroundWindow 有个限制:只有前台进程才有权设置前台窗口。我们此刻八成已经不是
+    /// 前台了,所以先把自己和当前前台线程"接"在一起借个权限。控制条上的地址栏也用它 ——
+    /// 那条窗口带 <c>WS_EX_NOACTIVATE</c>,不这么抢一下根本收不到键盘。
+    /// </para>
+    /// </summary>
+    internal static void ForceForeground(IntPtr hwnd)
+    {
+        if (hwnd == IntPtr.Zero)
+            return;
+
         IntPtr fg = GetForegroundWindow();
         uint fgThread = fg == IntPtr.Zero ? 0 : GetWindowThreadProcessId(fg, out _);
         uint curThread = GetCurrentThreadId();
@@ -915,6 +972,7 @@ public partial class MainWindow : Window
         // 写回去就等于把用户的透明度永久改掉了。用户改动由 SetOpacity 负责记录。
         _settings.Volume = _volumePercent / 100.0;
         _settings.SpeedRatio = GetSpeed();
+        _settings.WebMode = _webMode;
 
         SyncHotkeysToSettings();
         _settings.Save();
@@ -947,6 +1005,9 @@ public partial class MainWindow : Window
 
             if (Player is not null)
                 Player.Volume = value / 100.0;
+
+            // 网页模式下音量/静音也要同步给页面。
+            ApplyMuteStateToWeb();
         }
         finally
         {
@@ -995,8 +1056,9 @@ public partial class MainWindow : Window
             _speedRatio = PlaybackSpeeds[clamped];
 
             // 用户设定的倍速;按住快进时的临时 2 倍速在松开后会恢复成它。
-            if (Player is not null && !_holdTimer.IsEnabled)
-                Player.SpeedRatio = _speedRatio;
+            // 网页模式下 SetPlaybackSpeed 会把它写进页面里的 <video>。
+            if (!_holdTimer.IsEnabled)
+                SetPlaybackSpeed(_speedRatio);
         }
         finally
         {
@@ -1053,6 +1115,10 @@ public partial class MainWindow : Window
 
     private void PlayAt(int index)
     {
+        // 一旦播本地视频,就从网页模式切回来(两个模式不共存)。
+        if (_webMode)
+            ExitWebMode();
+
         if (_playlist.Count == 0)
             return;
 
@@ -1087,6 +1153,13 @@ public partial class MainWindow : Window
 
     private void Seek(double seconds)
     {
+        // 网页模式下快进 / 快退直接作用在页面里的 <video> 上。
+        if (_webMode)
+        {
+            WebSeekBy(seconds);
+            return;
+        }
+
         if (!_ready || Player.Source is null || !Player.NaturalDuration.HasTimeSpan)
             return;
 
@@ -1228,17 +1301,38 @@ public partial class MainWindow : Window
 
     // ---------------- 画面上的鼠标操作 ----------------
 
+    /// <summary>
+    /// 本地视频模式:整块画面都能拖窗口。
+    /// <para>
+    /// 网页模式刻意不走这里 —— 画面得整个让给网页,拖窗口只用顶部那条
+    /// <see cref="WebDragStrip"/>(见 <see cref="Window_PreviewMouseLeftButtonDown"/>)。
+    /// 之前没做这个区分,网页里按住一拖(比如拖 B 站进度条)就会把窗口一起拽走,
+    /// 表现就是"控制不了浏览器"。
+    /// </para>
+    /// </summary>
     private void Video_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
         // 单击不再切换播放/暂停,双击也不做任何事(全屏功能已移除),这里只负责拖动窗口。
+        if (_webMode)
+            return;
+
         _dragOrigin = e.GetPosition(this);
         _dragCandidate = true;
     }
 
+    /// <summary>
+    /// 网页模式下"拖窗口"的判定 + 把鼠标喂给网页,详见 <c>MainWindow.Web.cs</c> 里的同名方法
+    /// (那边是网页相关的实现,这里只留本地视频模式的逻辑)。
+    /// </summary>
+
+    /// <summary>本地视频模式拖画面 / 网页模式拖顶部那条,共用这一套收尾逻辑。</summary>
     private void Video_MouseMove(object sender, MouseEventArgs e)
     {
         if (!_dragCandidate || e.LeftButton != MouseButtonState.Pressed)
+        {
+            _dragCandidate = false;
             return;
+        }
 
         Point current = e.GetPosition(this);
 
@@ -1277,7 +1371,12 @@ public partial class MainWindow : Window
     /// </para>
     /// </summary>
     private void Window_PreviewMouseRightButtonUp(object sender, MouseButtonEventArgs e)
-        => e.Handled = true;
+    {
+        // 网页模式下这一下同样要喂给页面(不然 B 站自己的右键菜单出不来),
+        // 但 WPF 自己的那个菜单照旧一律压掉。
+        ForwardWebRightButtonUp(e);
+        e.Handled = true;
+    }
 
     private void Window_KeyUp(object sender, KeyEventArgs e)
     {

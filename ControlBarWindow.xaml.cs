@@ -44,6 +44,9 @@ public partial class ControlBarWindow : Window
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool GetWindowRect(IntPtr hWnd, out MonitorRect lpRect);
 
+    [DllImport("user32.dll")]
+    private static extern IntPtr GetForegroundWindow();
+
     [StructLayout(LayoutKind.Sequential)]
     private struct POINT
     {
@@ -76,6 +79,12 @@ public partial class ControlBarWindow : Window
     private readonly DispatcherTimer _autoHide;
     private bool _syncing;
     private bool _visible = true;
+
+    /// <summary>正在地址栏里打字。期间要保持条不收起,而且焦点不能交还给游戏。</summary>
+    private bool _editing;
+
+    /// <summary>开始编辑前的前台窗口(通常是游戏),打完字还给它。</summary>
+    private IntPtr _focusBeforeEdit;
 
     /// <summary>出现 / 收起时的竖向位移(淡入淡出的同时在动这一项)。</summary>
     private readonly TranslateTransform _slide = new();
@@ -147,6 +156,13 @@ public partial class ControlBarWindow : Window
     /// <summary>鼠标在屏幕顶部一小条内、或已经停在条上 → 显示;否则收起。</summary>
     private void UpdateAutoHide()
     {
+        // 正在地址栏里打字:不管鼠标跑哪去了都别收起,不然输入框会跟着窗口一起消失。
+        if (_editing)
+        {
+            SetVisible(true);
+            return;
+        }
+
         if (!GetCursorPos(out POINT cursor))
             return;
 
@@ -207,7 +223,7 @@ public partial class ControlBarWindow : Window
 
     private void OnMainStateChanged(object? sender, EventArgs e) => Sync();
 
-    /// <summary>把主窗口的当前状态(播放 / 静音 / 置顶 / 倍速 / 音量 / 文件名)拉到条上。</summary>
+    /// <summary>把主窗口的当前状态(播放 / 静音 / 置顶 / 倍速 / 音量 / 文件名 / 地址)拉到条上。</summary>
     private void Sync()
     {
         _syncing = true;
@@ -219,11 +235,102 @@ public partial class ControlBarWindow : Window
             SpeedButton.Content = _main.SpeedLabel;
             VolumeSlider.Value = _main.VolumePercent;
             TitleText.Text = _main.FileLabel;
+
+            // 地址栏只在浏览器模式下出现。
+            AddressRow.Visibility = _main.IsWebMode ? Visibility.Visible : Visibility.Collapsed;
+
+            // 切回本地视频模式时,地址栏连同编辑状态一起收掉(否则窗口会一直占着前台)。
+            if (!_main.IsWebMode && _editing)
+                EndEditing();
+
+            // 正在打字时别覆盖用户输了一半的内容;光标也不该乱跳。
+            string url = _main.WebCurrentUrl;
+            if (!_editing && !string.IsNullOrWhiteSpace(url) && AddressBox.Text != url)
+                AddressBox.Text = url;
         }
         finally
         {
             _syncing = false;
         }
+    }
+
+    // ---------------- 地址栏 ----------------
+
+    /// <summary>
+    /// 控制条是用 <c>WS_EX_NOACTIVATE</c> 挂在屏幕顶上的,代价是它永远不是"活动窗口",
+    /// 键盘输入进不来 —— 直接在地址栏里打字,字会全打到游戏里去。所以进编辑状态时
+    /// 临时把这个样式摘掉、把前台抢过来,打完字(回车 / Esc / 焦点跑掉)再装回去。
+    /// </summary>
+    private void BeginEditing()
+    {
+        if (_editing || AddressRow.Visibility != Visibility.Visible)
+            return;
+
+        _editing = true;
+        _focusBeforeEdit = GetForegroundWindow();
+
+        IntPtr handle = new WindowInteropHelper(this).Handle;
+
+        SetWindowLong(handle, GWL_EXSTYLE, GetWindowLong(handle, GWL_EXSTYLE) & ~WS_EX_NOACTIVATE);
+        MainWindow.ForceForeground(handle);
+        Activate();
+
+        AddressBox.Focus();
+        AddressBox.SelectAll();
+    }
+
+    /// <summary>退出编辑状态,把样式装回去、前台还给游戏。</summary>
+    private void EndEditing()
+    {
+        if (!_editing)
+            return;
+
+        _editing = false;
+
+        IntPtr handle = new WindowInteropHelper(this).Handle;
+        SetWindowLong(handle, GWL_EXSTYLE, GetWindowLong(handle, GWL_EXSTYLE) | WS_EX_NOACTIVATE);
+
+        Keyboard.ClearFocus();
+
+        // 只在前台"还在我们这条控制条上"时才交还 —— 用户如果已经点了别的窗口
+        // (比如去点画面),那他要的就是那个窗口,这时候把前台抢回给游戏是帮倒忙。
+        if (GetForegroundWindow() == handle)
+            MainWindow.GiveBackFocus(_focusBeforeEdit);
+    }
+
+    private void AddressRow_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e) => BeginEditing();
+
+    private void Address_GotKeyboardFocus(object sender, KeyboardFocusChangedEventArgs e) => BeginEditing();
+
+    private void Address_LostKeyboardFocus(object sender, KeyboardFocusChangedEventArgs e)
+    {
+        // 焦点跑掉了(比如 Alt+Tab 出去):别再占着前台不放。
+        if (_editing && !AddressBox.IsKeyboardFocusWithin)
+            EndEditing();
+    }
+
+    private void Address_KeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.Enter)
+        {
+            NavigateToAddress();
+            e.Handled = true;
+        }
+        else if (e.Key == Key.Escape)
+        {
+            // 放弃这次输入,把框里改回当前真实地址。
+            AddressBox.Text = _main.WebCurrentUrl;
+            EndEditing();
+            e.Handled = true;
+        }
+    }
+
+    private void Go_Click(object sender, RoutedEventArgs e) => NavigateToAddress();
+
+    private void NavigateToAddress()
+    {
+        _main.OpenWebUrl(AddressBox.Text);
+        EndEditing();
     }
 
     private void Open_Click(object sender, RoutedEventArgs e) => _main.OpenFiles();

@@ -63,6 +63,38 @@
             <Setter Property="Margin" Value="6,6" />
             <Setter Property="Background" Value="#33FFFFFF" />
         </Style>
+
+        <!-- 地址栏输入框:自己画模板,不受浅色主题影响(和 BarButton 一个道理) -->
+        <Style x:Key="AddressBox" TargetType="TextBox">
+            <Setter Property="Height" Value="24" />
+            <Setter Property="FontFamily" Value="Segoe UI" />
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="Foreground" Value="#F2FFFFFF" />
+            <Setter Property="CaretBrush" Value="#F2FFFFFF" />
+            <Setter Property="SelectionBrush" Value="#FF2E90FF" />
+            <Setter Property="Background" Value="#26FFFFFF" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Padding" Value="8,0" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="TextBox">
+                        <Border x:Name="Bd" Background="{TemplateBinding Background}" CornerRadius="6">
+                            <ScrollViewer x:Name="PART_ContentHost"
+                                          Margin="{TemplateBinding Padding}"
+                                          VerticalAlignment="Center"
+                                          Focusable="False"
+                                          HorizontalScrollBarVisibility="Hidden"
+                                          VerticalScrollBarVisibility="Hidden" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsKeyboardFocused" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="#3DFFFFFF" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
     </Window.Resources>
 
     <Border Background="#E615171B"
@@ -70,45 +102,76 @@
             BorderThickness="0,0,1,1"
             CornerRadius="0,0,14,14"
             Padding="10,4">
-        <StackPanel Orientation="Horizontal">
-            <TextBlock x:Name="TitleText"
-                       MaxWidth="190"
-                       Margin="4,0,2,0"
-                       VerticalAlignment="Center"
-                       TextTrimming="CharacterEllipsis"
-                       Foreground="#B3FFFFFF"
-                       Text="把视频拖到这里开始播放" />
+        <StackPanel Orientation="Vertical">
 
-            <Border Style="{StaticResource BarSeparator}" />
+            <!-- 地址栏:只有浏览器模式才出现,摆在按钮行上面。
+                 点它的时候靠代码临时摘掉 WS_EX_NOACTIVATE,否则这条窗口根本收不到键盘。 -->
+            <Grid x:Name="AddressRow"
+                  Visibility="Collapsed"
+                  Margin="3,4,3,4"
+                  PreviewMouseLeftButtonDown="AddressRow_PreviewMouseLeftButtonDown">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
 
-            <Button Style="{StaticResource BarButton}" Content="&#xE8E5;" Click="Open_Click" ToolTip="打开视频文件" />
-            <Button Style="{StaticResource BarButton}" Content="&#xE892;" Click="Previous_Click" ToolTip="上一集" />
-            <Button x:Name="PlayButton" Style="{StaticResource BarButton}" Content="&#xE768;" Click="PlayPause_Click" ToolTip="播放 / 暂停  (Ctrl+Alt+Space)" />
-            <Button Style="{StaticResource BarButton}" Content="&#xE893;" Click="Next_Click" ToolTip="下一集" />
-            <Button Style="{StaticResource BarTextButton}" Content="-5s"
-                    PreviewMouseLeftButtonDown="Rewind_Press"
-                    PreviewMouseLeftButtonUp="Rewind_Release"
-                    ToolTip="快退 5 秒(按住 = 2 倍速,松开恢复)" />
-            <Button Style="{StaticResource BarTextButton}" Content="+5s"
-                    PreviewMouseLeftButtonDown="Forward_Press"
-                    PreviewMouseLeftButtonUp="Forward_Release"
-                    ToolTip="快进 5 秒(按住 = 2 倍速,松开恢复)" />
+                <TextBox x:Name="AddressBox"
+                         Grid.Column="0"
+                         Style="{StaticResource AddressBox}"
+                         MinWidth="440"
+                         ToolTip="输入网址后回车。按 Esc 取消"
+                         KeyDown="Address_KeyDown"
+                         GotKeyboardFocus="Address_GotKeyboardFocus"
+                         LostKeyboardFocus="Address_LostKeyboardFocus" />
 
-            <Border Style="{StaticResource BarSeparator}" />
+                <Button Grid.Column="1"
+                        Style="{StaticResource BarTextButton}"
+                        Content="前往"
+                        Margin="6,0,0,0"
+                        Click="Go_Click"
+                        ToolTip="打开地址栏里的网址" />
+            </Grid>
 
-            <Button x:Name="SpeedButton" Style="{StaticResource BarTextButton}" Content="1x" Click="Speed_Click" ToolTip="播放倍速:点一下换下一档" />
-            <Button x:Name="MuteButton" Style="{StaticResource BarButton}" Content="&#xE767;" Click="Mute_Click" ToolTip="静音" />
-            <Slider x:Name="VolumeSlider"
-                    Width="80" Height="22" Margin="4,0"
-                    Minimum="0" Maximum="100" Value="80"
-                    VerticalAlignment="Center"
-                    ValueChanged="Volume_ValueChanged"
-                    ToolTip="音量" />
+            <StackPanel Orientation="Horizontal">
+                <TextBlock x:Name="TitleText"
+                           MaxWidth="190"
+                           Margin="4,0,2,0"
+                           VerticalAlignment="Center"
+                           TextTrimming="CharacterEllipsis"
+                           Foreground="#B3FFFFFF"
+                           Text="把视频拖到这里开始播放" />
 
-            <Border Style="{StaticResource BarSeparator}" />
+                <Border Style="{StaticResource BarSeparator}" />
 
-            <Button Style="{StaticResource BarButton}" Content="&#xE713;" Click="Settings_Click" ToolTip="设置:改快捷键 / 透明度 / 音量 / 倍速" />
-            <Button Style="{StaticResource BarButton}" Content="&#xE8BB;" Click="Exit_Click" ToolTip="退出 CheatSheet" />
+                <Button Style="{StaticResource BarButton}" Content="&#xE8E5;" Click="Open_Click" ToolTip="打开视频文件" />
+                <Button Style="{StaticResource BarButton}" Content="&#xE892;" Click="Previous_Click" ToolTip="上一集" />
+                <Button x:Name="PlayButton" Style="{StaticResource BarButton}" Content="&#xE768;" Click="PlayPause_Click" ToolTip="播放 / 暂停  (Ctrl+Alt+Space)" />
+                <Button Style="{StaticResource BarButton}" Content="&#xE893;" Click="Next_Click" ToolTip="下一集" />
+                <Button Style="{StaticResource BarTextButton}" Content="-5s"
+                        PreviewMouseLeftButtonDown="Rewind_Press"
+                        PreviewMouseLeftButtonUp="Rewind_Release"
+                        ToolTip="快退 5 秒(按住 = 2 倍速,松开恢复)" />
+                <Button Style="{StaticResource BarTextButton}" Content="+5s"
+                        PreviewMouseLeftButtonDown="Forward_Press"
+                        PreviewMouseLeftButtonUp="Forward_Release"
+                        ToolTip="快进 5 秒(按住 = 2 倍速,松开恢复)" />
+
+                <Border Style="{StaticResource BarSeparator}" />
+
+                <Button x:Name="SpeedButton" Style="{StaticResource BarTextButton}" Content="1x" Click="Speed_Click" ToolTip="播放倍速:点一下换下一档" />
+                <Button x:Name="MuteButton" Style="{StaticResource BarButton}" Content="&#xE767;" Click="Mute_Click" ToolTip="静音" />
+                <Slider x:Name="VolumeSlider"
+                        Width="80" Height="22" Margin="4,0"
+                        Minimum="0" Maximum="100" Value="80"
+                        VerticalAlignment="Center"
+                        ValueChanged="Volume_ValueChanged"
+                        ToolTip="音量" />
+
+                <Border Style="{StaticResource BarSeparator}" />
+
+                <Button Style="{StaticResource BarButton}" Content="&#xE713;" Click="Settings_Click" ToolTip="设置:改快捷键 / 透明度 / 音量 / 倍速" />
+                <Button Style="{StaticResource BarButton}" Content="&#xE8BB;" Click="Exit_Click" ToolTip="退出 CheatSheet" />
+            </StackPanel>
         </StackPanel>
     </Border>
 </Window>

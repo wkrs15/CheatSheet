@@ -1,8 +1,11 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
-    <TargetFramework>net10.0-windows</TargetFramework>
+    <!-- 必须是带 Windows SDK 版本号的目标框架:
+         WebView2CompositionControl 依赖 CsWinRT 投影(Microsoft.Windows.SDK.NET),
+         用裸的 net10.0-windows 会在运行时抛 FileNotFoundException。 -->
+    <TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <UseWPF>true</UseWPF>
@@ -14,6 +17,20 @@
 
   <ItemGroup>
     <PackageReference Include="HandyControls" Version="3.7.0" />
+    <!-- 网页模式(播放网页视频)。用 Composition 版控件而不是传统的 HwndHost 版,
+         否则在分层透明窗口里渲染不出来。 -->
+    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4191.47" />
+  </ItemGroup>
+
+  <!-- PlayGuide 是放在项目目录下的独立参考工程(C++/WinRT),不属于本项目。
+       SDK 风格的项目会把它目录下的 *.xaml 一起 glob 进来,导致 XAML 编译报错。 -->
+  <ItemGroup>
+    <Compile Remove="PlayGuide\**" />
+    <Page Remove="PlayGuide\**" />
+    <ApplicationDefinition Remove="PlayGuide\**" />
+    <None Remove="PlayGuide\**" />
+    <Resource Remove="PlayGuide\**" />
+    <Content Remove="PlayGuide\**" />
   </ItemGroup>
 
 </Project>

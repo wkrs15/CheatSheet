@@ -81,6 +81,15 @@ public partial class SettingsWindow : Window
 
             ProportionalBox.IsChecked = _main.ProportionalResize;
 
+            // 播放模式:本地视频 / 浏览器。
+            if (_main.IsWebMode)
+                WebModeBox.IsChecked = true;
+            else
+                VideoModeBox.IsChecked = true;
+
+            if (HomeUrlBox.Text != _main.WebHomeUrl)
+                HomeUrlBox.Text = _main.WebHomeUrl;
+
             switch (_main.PauseBehavior)
             {
                 case 0:
@@ -149,6 +158,22 @@ public partial class SettingsWindow : Window
         _main.PauseBehavior = PauseNothingBox.IsChecked == true ? 0
                             : PauseHideBox.IsChecked == true ? 1
                             : 2;
+    }
+
+    private void PlayMode_Changed(object sender, RoutedEventArgs e)
+    {
+        if (_syncing || !_initialized)
+            return;
+
+        _main.SetWebMode(WebModeBox.IsChecked == true);
+    }
+
+    private void HomeUrl_Changed(object sender, TextChangedEventArgs e)
+    {
+        if (_syncing || !_initialized)
+            return;
+
+        _main.WebHomeUrl = HomeUrlBox.Text;
     }
 
     private void Proportional_Click(object sender, RoutedEventArgs e)

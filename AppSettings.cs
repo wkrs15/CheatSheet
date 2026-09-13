@@ -31,6 +31,18 @@ public sealed class AppSettings
     public int SeekStepSeconds { get; set; } = 5;
     public string? LastDirectory { get; set; }
 
+    /// <summary>网页模式打开时加载的首页。</summary>
+    public string WebHomeUrl { get; set; } = "https://www.bilibili.com";
+
+    /// <summary>上次关闭时是否停在网页模式(true = 网页,false = 本地视频)。</summary>
+    public bool WebMode { get; set; }
+
+    /// <summary>
+    /// 网页视频开始播放后是否自动进入"网页全屏"(替用户点网站自己的网页全屏按钮,
+    /// 比如 B 站的 <c>.bpx-player-ctrl-web</c>)。
+    /// </summary>
+    public bool AutoWebFullscreen { get; set; } = true;
+
     /// <summary>
     /// 用户自定义的全局热键:动作标识 → 手势字符串(如 <c>"Ctrl+Alt+Space"</c>)。
     /// 缺失的动作由代码里的默认手势补齐,所以升级新增动作时旧配置依然可用。
