@@ -2,7 +2,6 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:hc="https://handyorg.github.io/handycontrol"
-        xmlns:wv2="clr-namespace:Microsoft.Web.WebView2.Wpf;assembly=Microsoft.Web.WebView2.Wpf"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         mc:Ignorable="d"
@@ -113,14 +112,14 @@
                        VerticalAlignment="Center"
                        IsHitTestVisible="False" />
 
-            <!-- 网页模式:内置浏览器播放网页视频(如 B 站攻略)。
-                 必须是 Composition 版控件 —— 传统 WebView2 走 HwndHost,
-                 在分层透明窗口里渲染不出来,也跟不上透明度。
-                 默认折叠,切到网页模式时由代码显示并初始化。 -->
-            <wv2:WebView2CompositionControl x:Name="WebView"
-                                            Visibility="Collapsed"
-                                            HorizontalAlignment="Stretch"
-                                            VerticalAlignment="Stretch" />
+            <!-- 网页模式的宿主。WebView 不放 XAML 里,而是按需创建、退出网页模式就销毁
+                 (见 MainWindow.Web.cs):它背后是一整组 Edge 进程,只折叠起来的话
+                 那几百 MB 内存和后台 GPU/网络活动一直白占着。
+                 销毁时会把控件从这个 Children 里摘掉再 Dispose,所以这里必须是个能装的容器。 -->
+            <Grid x:Name="WebHost"
+                  HorizontalAlignment="Stretch"
+                  VerticalAlignment="Stretch" />
+
 
             <!-- 网页模式下的"标题栏":WebView 会把画面区的鼠标全部吃掉,拖画面已经移动不了窗口了。
                  所以在画面最顶上压一条透明的拖动区,让鼠标腾出来操作网页 ——

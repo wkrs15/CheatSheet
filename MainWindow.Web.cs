@@ -6,6 +6,7 @@ using System.Windows.Input;
 using System.Windows.Media;
 using HandyControl.Data;
 using Microsoft.Web.WebView2.Core;
+using Microsoft.Web.WebView2.Wpf;
 using Growl = HandyControl.Controls.Growl;
 
 namespace CheatSheet;
@@ -23,8 +24,20 @@ public partial class MainWindow
     /// <summary>当前是否处于网页模式。</summary>
     private bool _webMode;
 
-    /// <summary>WebView2 是否已经初始化过(初始化很贵,做一次就够)。</summary>
+    /// <summary>WebView2 是否已经初始化过(初始化很贵,一次网页模式里只做一次)。</summary>
     private bool _webInitialized;
+
+    /// <summary>
+    /// 这一次网页模式用的 WebView。它是<b>按需创建、退出即销毁</b>的:
+    /// 背后是一整组 Edge 进程(动辄几百 MB)加上后台的 GPU / 网络活动,
+    /// 退出网页模式只把它折叠起来的话,这些资源会一直白占着 —— 而这个程序的使用场景
+    /// 恰恰是"边玩游戏边看",资源空不出来是要挨骂的。
+    /// <para>
+    /// 之所以不能"留着实例下次复用":WebView2 的 <c>Dispose()</c> 之后同一个实例
+    /// 就不能再初始化了(会抛 ObjectDisposedException),所以每次进网页模式都 new 一个新的。
+    /// </para>
+    /// </summary>
+    private WebView2CompositionControl? WebView;
 
     /// <summary>页面里有没有 &lt;video&gt;。没有就不算"暂停",免得窗口莫名其妙变暗。</summary>
     private bool _webHasVideo;
@@ -68,8 +81,12 @@ public partial class MainWindow
     /// <summary>页面当前地址。</summary>
     internal string WebCurrentUrl => _webCurrentUrl;
 
-    /// <summary>切到网页模式,加载设置里的首页。</summary>
-    internal void EnterWebMode() => EnterWebMode(_settings.WebHomeUrl);
+    /// <summary>
+    /// 切到网页模式。优先回到**上次那个页面** —— 退出网页模式会把 WebView 整个销毁,
+    /// 回来本来就是重新加载,再回首页的话你追的番就白追了。首页只在没来过任何页面时用。
+    /// </summary>
+    internal void EnterWebMode()
+        => EnterWebMode(string.IsNullOrWhiteSpace(_webCurrentUrl) ? _settings.WebHomeUrl : _webCurrentUrl);
 
     /// <summary>切到网页模式并打开指定地址。</summary>
     internal void EnterWebMode(string? url)
@@ -116,6 +133,10 @@ public partial class MainWindow
 
         // 网页的声音停掉,免得退出后还在后台响。
         ApplyMuteStateToWeb(forceMute: true);
+
+        // 然后把 WebView 整个收掉:Edge 那组进程、GPU、网络全释放。
+        // (上面那句静音留着是为了"销毁万一失败"时不至于还在后台出声。)
+        ReleaseWebView();
 
         RaiseStateChanged();
     }
@@ -181,11 +202,13 @@ public partial class MainWindow
             return;
         }
 
-        if (WebView.CoreWebView2 is not null)
+        CoreWebView2? core = WebView?.CoreWebView2;
+
+        if (core is not null)
         {
             try
             {
-                WebView.CoreWebView2.Navigate(NormalizeUrl(url));
+                core.Navigate(NormalizeUrl(url));
             }
             catch (Exception ex)
             {
@@ -197,8 +220,7 @@ public partial class MainWindow
     /// <summary>按模式切换各个视图的显隐。</summary>
     private void ApplyWebModeVisibility()
     {
-        WebView.Visibility = _webMode ? Visibility.Visible : Visibility.Collapsed;
-
+        // WebView 不用管显隐 —— 它只在网页模式下存在(退出时整个销毁)。
         // 网页模式整块画面都归浏览器,所以要给它留一条专门拖窗口的"标题栏"。
         WebDragStrip.Visibility = _webMode ? Visibility.Visible : Visibility.Collapsed;
 
@@ -219,7 +241,7 @@ public partial class MainWindow
 
     private async Task EnsureWebViewAsync(string? url)
     {
-        if (_webInitialized)
+        if (_webInitialized && WebView is not null)
         {
             if (!string.IsNullOrWhiteSpace(url))
                 NavigateWeb(url);
@@ -227,11 +249,27 @@ public partial class MainWindow
             return;
         }
 
+        // 上一次退出网页模式时把控件销毁掉了(Dispose 过的实例不能再初始化),
+        // 所以这里重新 new 一个挂到宿主里。
+        if (WebView is null)
+        {
+            WebView = new WebView2CompositionControl
+            {
+                HorizontalAlignment = HorizontalAlignment.Stretch,
+                VerticalAlignment = VerticalAlignment.Stretch
+            };
+
+            WebHost.Children.Add(WebView);
+        }
+
         try
         {
             await WebView.EnsureCoreWebView2Async();
 
-            var core = WebView.CoreWebView2;
+            CoreWebView2? core = WebView.CoreWebView2;
+
+            if (core is null)
+                return;
 
             // 关掉浏览器自带的右键菜单/状态栏/DevTools,让它更像"播放器"而不是浏览器。
             core.Settings.AreDefaultContextMenusEnabled = false;
@@ -250,8 +288,15 @@ public partial class MainWindow
             // 站内跳转(SPA)不一定触发 NavigationCompleted,地址栏要跟着刷新。
             core.SourceChanged += (_, _) =>
             {
-                _webCurrentUrl = core.Source;
-                RaiseStateChanged();
+                try
+                {
+                    _webCurrentUrl = core.Source;
+                    RaiseStateChanged();
+                }
+                catch
+                {
+                    // 正在拆控件时可能抛 ObjectDisposedException,忽略。
+                }
             };
 
             _webInitialized = true;
@@ -275,10 +320,14 @@ public partial class MainWindow
 
     private void NavigateWeb(string url)
     {
+        CoreWebView2? core = _webInitialized ? WebView?.CoreWebView2 : null;
+
+        if (core is null)
+            return;
+
         try
         {
-            if (_webInitialized && WebView.CoreWebView2 is not null)
-                WebView.CoreWebView2.Navigate(NormalizeUrl(url));
+            core.Navigate(NormalizeUrl(url));
         }
         catch (Exception ex)
         {
@@ -301,7 +350,7 @@ public partial class MainWindow
 
         if (e.IsSuccess)
         {
-            _webCurrentUrl = WebView.CoreWebView2?.Source ?? _webCurrentUrl;
+            _webCurrentUrl = WebView?.CoreWebView2?.Source ?? _webCurrentUrl;
 
             // 新页面里的 <video> 还不知道我们设了倍速,重新写一次。
             WebSetSpeed(_speedRatio);
@@ -329,7 +378,7 @@ public partial class MainWindow
         if (!_webMode || !_webInitialized || _webStatePolling)
             return;
 
-        var core = WebView.CoreWebView2;
+        CoreWebView2? core = WebView?.CoreWebView2;
 
         if (core is null)
             return;
@@ -525,10 +574,12 @@ public partial class MainWindow
     /// </summary>
     private bool ForwardWebMouse(CoreWebView2MouseEventKind kind, MouseEventArgs e, uint mouseData = 0)
     {
-        if (!_webMode || !_webInitialized || WebView.CoreWebView2 is null)
+        WebView2CompositionControl? view = _webMode && _webInitialized ? WebView : null;
+
+        if (view is null || view.CoreWebView2 is null)
             return false;
 
-        _sendMouseInput ??= typeof(Microsoft.Web.WebView2.Wpf.WebView2CompositionControl).GetMethod(
+        _sendMouseInput ??= typeof(WebView2CompositionControl).GetMethod(
             "SendMouseInput",
             BindingFlags.Instance | BindingFlags.NonPublic,
             binder: null,
@@ -561,14 +612,14 @@ public partial class MainWindow
 
         try
         {
-            Point dip = e.GetPosition(WebView);
-            DpiScale dpi = VisualTreeHelper.GetDpi(WebView);
+            Point dip = e.GetPosition(view);
+            DpiScale dpi = VisualTreeHelper.GetDpi(view);
 
             var physical = new System.Drawing.Point(
                 (int)Math.Round(dip.X * dpi.DpiScaleX),
                 (int)Math.Round(dip.Y * dpi.DpiScaleY));
 
-            _sendMouseInput.Invoke(WebView,
+            _sendMouseInput.Invoke(view,
                 [kind, CurrentMouseVirtualKeys(), mouseData, physical]);
 
             return true;
@@ -604,8 +655,10 @@ public partial class MainWindow
     {
         try
         {
-            if (_webInitialized && WebView.CoreWebView2 is not null)
-                WebView.CoreWebView2.IsMuted = forceMute || !_webMode || _muted;
+            CoreWebView2? core = _webInitialized ? WebView?.CoreWebView2 : null;
+
+            if (core is not null)
+                core.IsMuted = forceMute || !_webMode || _muted;
         }
         catch
         {
@@ -685,10 +738,14 @@ public partial class MainWindow
     /// <summary>把一段脚本丢给页面执行。不需要返回值时用它(要返回值得用 ExecuteScriptAsync)。</summary>
     private async Task ExecuteWebScriptAsync(string script)
     {
+        CoreWebView2? core = _webInitialized ? WebView?.CoreWebView2 : null;
+
+        if (core is null)
+            return;
+
         try
         {
-            if (_webInitialized && WebView.CoreWebView2 is not null)
-                await WebView.CoreWebView2.ExecuteScriptAsync(script);
+            await core.ExecuteScriptAsync(script);
         }
         catch
         {
@@ -803,8 +860,7 @@ public partial class MainWindow
 
         try
         {
-            if (_webInitialized && WebView.CoreWebView2 is not null)
-                await WebView.CoreWebView2.ExecuteScriptAsync(script);
+            await ExecuteWebScriptAsync(script);
         }
         catch
         {
@@ -827,29 +883,46 @@ public partial class MainWindow
         return "https://" + url;
     }
 
-    /// <summary>关闭窗口时释放 WebView2。</summary>
-    private void DisposeWeb()
+    /// <summary>
+    /// 把 WebView 整个收掉:退出网页模式时调用,关闭窗口时也调用。
+    /// <para>
+    /// 顺序很重要:先 <c>Stop()</c> 停掉导航,再把它从可视树里<b>摘下来</b>,最后才 <c>Dispose()</c>。
+    /// 还在可视树里就直接 Dispose,渲染那边(D3DImage)会留下悬空的引用。
+    /// </para>
+    /// <para>
+    /// 摘掉之后它背后那组 Edge 进程就会退出,内存 / GPU / 网络全部还给系统
+    /// (运行时为了复用会多留一小会儿,然后自己走)。下次进网页模式会 <c>new</c> 一个新的 ——
+    /// <c>Dispose</c> 过的实例不能再初始化。
+    /// </para>
+    /// </summary>
+    private void ReleaseWebView()
     {
-        try
-        {
-            if (_webInitialized && WebView.CoreWebView2 is not null)
-                WebView.CoreWebView2.Stop();
-        }
-        catch
-        {
-            // 忽略。
-        }
+        WebView2CompositionControl? view = WebView;
 
-        try
-        {
-            WebView.Dispose();
-        }
-        catch
-        {
-            // 忽略。
-        }
-
+        WebView = null;
         _webInitialized = false;
-        _webMode = false;
+        _webStatePolling = false;
+
+        if (view is null)
+            return;
+
+        try
+        {
+            view.CoreWebView2?.Stop();
+        }
+        catch
+        {
+            // 忽略。
+        }
+
+        try
+        {
+            WebHost.Children.Remove(view);
+            view.Dispose();
+        }
+        catch
+        {
+            // 忽略:收资源失败也不该影响退出。
+        }
     }
 }

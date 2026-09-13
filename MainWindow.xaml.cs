@@ -566,7 +566,7 @@ public partial class MainWindow : Window
         _holdTimer.Stop();
         _hotkeys?.Dispose();
         SaveSettings();
-        DisposeWeb();
+        ReleaseWebView();
 
         _settingsWindow?.Close();
         _settingsWindow = null;
