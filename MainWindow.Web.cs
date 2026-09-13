@@ -767,31 +767,56 @@ public partial class MainWindow
     private async Task AutoWebFullscreenAsync()
     {
         const string script = @"(() => {
-    const BUTTON = '.bpx-player-ctrl-web';
+    // B 站旧的选择器
+    const BILI = '.bpx-player-ctrl-web';
+    // 抖音(xgplayer)的「网页全屏」图标:data-state=normal 表示当前没进,=full 表示进了
+    const DY_WEB = '.xgplayer-page-full-screen';
+    // 抖音的「打开声音」按钮(web 端播放页默认静音,叠在画面中央)
+    const DY_UNMUTE_TEXT = '打开声音';
+
     const FILL_CSS = 'position:fixed !important;inset:0 !important;width:100% !important;' +
                      'height:100% !important;z-index:2147483647 !important;' +
                      'object-fit:contain !important;background:#000 !important;';
 
-    // 已经在网页全屏里了?看播放器容器有没有变成「铺满视口的 fixed 层」。
-    // 只要这里返回 false,就说明页面还是普通形态,点一下按钮是安全的(不会反而把全屏点掉)。
+    // 是否已经进了「网页全屏」
     const inWebScreen = () => {
-        const els = [document.querySelector('#bilibili-player'),
-                     document.querySelector('.bpx-player-container')];
-        for (const el of els) {
+        // B 站:看播放器容器有没有变成「铺满视口的 fixed 层」,或者按钮的 aria-label 变成「退出」
+        const bili = [document.querySelector('#bilibili-player'),
+                      document.querySelector('.bpx-player-container')];
+        for (const el of bili) {
             if (!el) continue;
             if (el.classList.contains('mode-webscreen')) return true;
-            if (getComputedStyle(el).position !== 'fixed') continue;
+            const s = getComputedStyle(el);
+            if (s.position !== 'fixed') continue;
             const r = el.getBoundingClientRect();
             if (r.width >= innerWidth * 0.98 && r.height >= innerHeight * 0.98) return true;
         }
-        const btn = document.querySelector(BUTTON);
-        return !!btn && (btn.getAttribute('aria-label') || '').indexOf('退出') !== -1;
+        const biliBtn = document.querySelector(BILI);
+        if (biliBtn && (biliBtn.getAttribute('aria-label') || '').indexOf('退出') !== -1) return true;
+
+        // 抖音:网页全屏会改 data-state,也会给 .xgplayer 挂上 .xgplayer-is-page-full 类
+        const dyBtn = document.querySelector(DY_WEB);
+        if (dyBtn && dyBtn.getAttribute('data-state') !== 'normal') return true;
+        if (document.querySelector('.xgplayer.xgplayer-is-page-full')) return true;
+
+        return false;
     };
 
-    // 控制条是「鼠标移上去才出来」的,没动过鼠标时按钮可能压根没渲染 —— 先隔空挪一下鼠标叫醒它。
+    // 抖音「打开声音」:每轮都试一次 —— 切上下一个视频后按钮会重新出现
+    const openSound = () => {
+        for (const b of document.querySelectorAll('button')) {
+            if ((b.textContent || '').indexOf(DY_UNMUTE_TEXT) !== -1) {
+                b.click();
+                return;
+            }
+        }
+    };
+
+    // 控制条是「鼠标移上去才出来」的(B 站),没动过鼠标时按钮可能压根没渲染 —— 先隔空挪一下鼠标叫醒它
     const wake = () => {
         const area = document.querySelector('.bpx-player-video-area') ||
-                     document.querySelector('#bilibili-player');
+                     document.querySelector('#bilibili-player') ||
+                     document.querySelector('.xgplayer');
         if (!area) return;
         const r = area.getBoundingClientRect();
         if (r.width < 2 || r.height < 2) return;
@@ -803,18 +828,29 @@ public partial class MainWindow
         area.dispatchEvent(new MouseEvent('mousemove', opts));
     };
 
-    // 兜底:页面里压根没有「网页全屏」这东西(非 B 站),才退回「自己把主视频铺满」的老办法。
-    // 只认「正在播放 + 够大」的视频,免得把 B 站首页那种悬停预览小窗给拉成大屏。
+    // 兜底:页面里压根没有「网页全屏」,才退回「自己把主视频铺满」的老办法
+    // 只认「正在播放 + 够大」的视频,免得把 B 站首页那种悬停预览小窗给拉成大屏
     const fallbackFill = () => {
+        let best = null, area = 0;
         for (const v of document.querySelectorAll('video')) {
             const r = v.getBoundingClientRect();
-            if (v.paused || r.width < innerWidth * 0.6 || r.height < innerHeight * 0.4) continue;
-            if (v.dataset.cheatSheetFull === '1') return;
-            v.dataset.cheatSheetFull = '1';
-            v.style.cssText += ';' + FILL_CSS;
-            document.documentElement.style.setProperty('overflow', 'hidden', 'important');
-            return;
+            const a = r.width * r.height;
+            if (a > area) { best = v; area = a; }
         }
+        if (!best) return;
+        const r = best.getBoundingClientRect();
+        if (best.paused || r.width < innerWidth * 0.6 || r.height < innerHeight * 0.4) return;
+        if (best.dataset.cheatSheetFull === '1') return;
+        best.dataset.cheatSheetFull = '1';
+        best.style.cssText += ';' + FILL_CSS;
+        document.documentElement.style.setProperty('overflow', 'hidden', 'important');
+    };
+
+    // 选要点的「网页全屏」按钮:优先抖音(xgplayer 带 data-state 状态),没有再退回 B 站
+    const pickButton = () => {
+        const dy = document.querySelector(DY_WEB);
+        if (dy && dy.getAttribute('data-state') === 'normal') return dy;
+        return document.querySelector(BILI);
     };
 
     let clicks = 0;
@@ -823,12 +859,12 @@ public partial class MainWindow
 
     const tick = () => {
         if (inWebScreen()) return true;
-
-        // 刚点过就给它 2 秒反应时间,否则自己的重试会把刚进去的全屏又点出来。
+        // 刚点过就给它 2 秒反应时间,否则自己的重试会把刚进去的全屏又点出来
         if (clicks > 0 && Date.now() - clickedAt < 2000) return false;
 
-        const btn = document.querySelector(BUTTON);
+        openSound();
 
+        const btn = pickButton();
         if (btn) {
             wake();
             btn.click();
@@ -837,13 +873,11 @@ public partial class MainWindow
         }
 
         wake();
-
-        // 等了 10 秒还没这个按钮,说明这个站没有「网页全屏」,走兜底。
+        // 等了 10 秒还没按钮,说明这个站没有「网页全屏」,走兜底
         if (Date.now() - startedAt > 10000) {
             fallbackFill();
             return true;
         }
-
         return false;
     };
 
@@ -862,15 +896,37 @@ public partial class MainWindow
         }
     }
 
-    /// <summary>补全用户输入的地址(没写协议的补 https://;像"bilibili.com"也能用)。</summary>
+    /// <summary>
+    /// 把用户输入的地址规整一下:
+    /// <list type="bullet">
+    /// <item>分享口令 / 复制粘贴的那段文本里有链接(常见于抖音/B 站的口令):抠出里面第一个
+    ///       <c>http(s)://…</c>,并去掉末尾常见标点(避免浏览器把 <c>。</c> / <c>，</c> / 右引号当成 URL 的一部分)。</item>
+    /// <item>形如 <c>bilibili.com</c> 这种没写协议的,补成 <c>https://</c>。</item>
+    /// <item><c>about:blank</c> 这类特殊 scheme 原样返回。</item>
+    /// </list>
+    /// </summary>
+    private static readonly System.Text.RegularExpressions.Regex ShareUrlRegex
+        = new(@"https?://[^\s'""<>，。\u3001\u3002\uFF01\uFF1F]+",
+              System.Text.RegularExpressions.RegexOptions.Compiled);
+
     private static string NormalizeUrl(string url)
     {
         url = url.Trim();
 
+        // 分享文本里抠链接
+        var m = ShareUrlRegex.Match(url);
+        if (m.Success)
+        {
+            string found = m.Value;
+
+            // 把容易黏在链接尾部的中文标点 / 右半边括号 / 右引号都去掉
+            char[] trim = { '。', '，', ',', '.', ')', '】', '」', '』', '"', ';', '；' };
+            return found.TrimEnd(trim);
+        }
+
         if (url.Contains("://", StringComparison.Ordinal))
             return url;
 
-        // 形如 "about:blank" 这类特殊 scheme 原样返回。
         if (url.StartsWith("about:", StringComparison.OrdinalIgnoreCase))
             return url;
 
