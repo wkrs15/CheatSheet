@@ -2,15 +2,15 @@
   <img src="docs/logo.svg" width="160" alt="logo:一张写着答案、按下播放键的小纸条">
   <h1>CheatSheet</h1>
   <p><strong>边玩游戏边看攻略的置顶小窗播放器。</strong></p>
+
+  ![平台](https://img.shields.io/badge/platform-Windows%2010%20%7C%2011-0078D6?logo=windows&logoColor=white)
+  ![.NET](https://img.shields.io/badge/.NET-10-512BD4?logo=dotnet&logoColor=white)
+  ![UI](https://img.shields.io/badge/UI-WPF-68217A)
+  [![下载](https://img.shields.io/badge/%E4%B8%8B%E8%BD%BD-Releases-2E90FF)](../../releases)
 </div>
 
 > 把攻略视频丢进一个置顶小窗,用全局热键随时控制 —— 不切窗口、不打断游戏操作。
 > 本地视频和网页视频(B 站等)都能放。
-
-![平台](https://img.shields.io/badge/platform-Windows%2010%20%7C%2011-0078D6?logo=windows&logoColor=white)
-![.NET](https://img.shields.io/badge/.NET-10-512BD4?logo=dotnet&logoColor=white)
-![UI](https://img.shields.io/badge/UI-WPF-68217A)
-[![下载](https://img.shields.io/badge/%E4%B8%8B%E8%BD%BD-Releases-2E90FF)](../../releases)
 
 ![界面示意:屏幕顶端的控制条 + 压在游戏画面上的置顶小窗](docs/layout.svg)
 
