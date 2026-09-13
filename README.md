@@ -1,5 +1,7 @@
 # CheatSheet
 
+<img src="docs/logo.svg" width="92" align="right" alt="logo:一张写着答案、按下播放键的小纸条">
+
 **边玩游戏边看攻略的置顶小窗播放器。**
 
 > 把攻略视频丢进一个置顶小窗,用全局热键随时控制 —— 不切窗口、不打断游戏操作。

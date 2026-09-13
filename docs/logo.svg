@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="CheatSheet:一张写着答案的小纸条">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#3FA2FF"/>
+      <stop offset="1" stop-color="#1E78E0"/>
+    </linearGradient>
+    <linearGradient id="paper" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FFFFFF"/>
+      <stop offset="1" stop-color="#EDF2F9"/>
+    </linearGradient>
+  </defs>
+
+  <!-- 圆角徽章底 -->
+  <rect x="16" y="16" width="480" height="480" rx="112" fill="url(#bg)"/>
+  <rect x="18" y="18" width="476" height="476" rx="110" fill="none" stroke="#FFFFFF" stroke-opacity=".14" stroke-width="4"/>
+
+  <!-- 小纸条:整体微倾斜,像刚传到手里 -->
+  <g transform="rotate(-8 256 268)">
+    <!-- 投影 -->
+    <path d="M142 179 H314 L382 247 V377 Q382 389 370 389 H142 Q130 389 130 377 V191 Q130 179 142 179 Z"
+          fill="#072F66" opacity=".28"/>
+    <!-- 纸身:右上角折角 -->
+    <path d="M142 163 H314 L382 231 V361 Q382 373 370 373 H142 Q130 373 130 361 V175 Q130 163 142 163 Z"
+          fill="url(#paper)"/>
+    <!-- 折角翻下来的小三角 -->
+    <path d="M314 163 V219 Q314 231 326 231 H382 Z" fill="#D7E1EF"/>
+    <path d="M314 163 L382 231" stroke="#C3D2E4" stroke-width="3" fill="none"/>
+
+    <!-- 批改的红对勾:答案是对的 -->
+    <path d="M167 200 l14 11 22 -22" fill="none" stroke="#E5484D"
+          stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
+    <!-- 涂写的字迹 -->
+    <path d="M164 228 H298" stroke="#A9B7C9" stroke-width="14" stroke-linecap="round"/>
+    <path d="M164 270 H246" stroke="#A9B7C9" stroke-width="14" stroke-linecap="round"/>
+    <!-- 答案就是视频:蓝色播放键 -->
+    <path d="M228 284 L288 314 L228 344 Z" fill="#2E90FF"
+          stroke="#2E90FF" stroke-width="12" stroke-linejoin="round"/>
+  </g>
+</svg>
