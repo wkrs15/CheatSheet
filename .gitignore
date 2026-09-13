@@ -15,3 +15,6 @@ ghost1372.github.io-master/
 
 # Reasonix 会话日志(工具运行记录,不属于项目)
 .reasonix/
+
+# 智能体工作目录(笔记 / 技能 / 临时脚本,不属于项目)
+.workbuddy/
