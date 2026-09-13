@@ -7,6 +7,7 @@
   ![.NET](https://img.shields.io/badge/.NET-10-512BD4?logo=dotnet&logoColor=white)
   ![UI](https://img.shields.io/badge/UI-WPF-68217A)
   [![下载](https://img.shields.io/badge/%E4%B8%8B%E8%BD%BD-Releases-2E90FF)](../../releases)
+  [![许可](https://img.shields.io/badge/license-MIT-3DA639)](LICENSE)
 </div>
 
 > 把攻略视频丢进一个置顶小窗,用全局热键随时控制 —— 不切窗口、不打断游戏操作。
@@ -132,3 +133,7 @@ git push origin v0.2
 ## 更新日志
 
 每个版本改了什么见 [CHANGELOG.md](CHANGELOG.md) —— 发版时它会自动被用作 Release 说明。
+
+## 许可
+
+本项目基于 [MIT](LICENSE) 协议开源。
