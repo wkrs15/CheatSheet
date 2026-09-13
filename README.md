@@ -8,7 +8,6 @@
 ![平台](https://img.shields.io/badge/platform-Windows%2010%20%7C%2011-0078D6?logo=windows&logoColor=white)
 ![.NET](https://img.shields.io/badge/.NET-10-512BD4?logo=dotnet&logoColor=white)
 ![UI](https://img.shields.io/badge/UI-WPF-68217A)
-![AI](https://img.shields.io/badge/AI-WorkBuddy%20%C2%B7%20DeepSeek%20V4.1%20Flash-2E90FF)
 [![下载](https://img.shields.io/badge/%E4%B8%8B%E8%BD%BD-Releases-2E90FF)](../../releases)
 
 ![界面示意:屏幕顶端的控制条 + 压在游戏画面上的置顶小窗](docs/layout.svg)
@@ -99,9 +98,6 @@ dotnet run -- "D:\videos\guide.mp4"
 
 **技术栈**:C# / WPF / .NET 10 + [HandyControl](https://github.com/HandyOrg/HandyControl)(UI 主题)、`MediaElement`(本地视频)、
 `WebView2CompositionControl`(网页模式)、Win32 `RegisterHotKey`(全局热键)。
-
-**开发方式**:本项目使用 **Reasonix + WorkBuddy**(模型 **DeepSeek V4.1 Flash**)编写 ——
-功能实现、问题排查到文档均由 AI 智能体完成,人工负责提需求、实测和把关。
 
 > 网页模式必须用 Composition 版的 WebView2 —— 传统的 HwndHost 版在分层透明窗口里渲染不出来。
 > 代价是它的鼠标命中测试在这种窗口里不生效,所以画面上的鼠标是由我们自己转发给浏览器的
