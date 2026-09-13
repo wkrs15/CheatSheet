@@ -1,10 +1,8 @@
-<p align="center">
-  <img src="docs/logo.svg" width="120" alt="logo:一张写着答案、按下播放键的小纸条">
-</p>
-
-# CheatSheet
-
-**边玩游戏边看攻略的置顶小窗播放器。**
+<div align="center">
+  <img src="docs/logo.svg" width="160" alt="logo:一张写着答案、按下播放键的小纸条">
+  <h1>CheatSheet</h1>
+  <p><strong>边玩游戏边看攻略的置顶小窗播放器。</strong></p>
+</div>
 
 > 把攻略视频丢进一个置顶小窗,用全局热键随时控制 —— 不切窗口、不打断游戏操作。
 > 本地视频和网页视频(B 站等)都能放。
