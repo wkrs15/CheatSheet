@@ -92,7 +92,6 @@ public partial class MainWindow : Window
             new("WindowVisible", "显示 / 隐藏播放窗口", "Ctrl+Alt+T", () => RunHotkey(ToggleWindowVisible)),
             new("OpacityDown", "透明度 -", "Ctrl+Alt+Z", () => RunHotkey(() => ChangeOpacity(-10))),
             new("OpacityUp", "透明度 +", "Ctrl+Alt+X", () => RunHotkey(() => ChangeOpacity(10))),
-            new("WebMode", "视频 / 网页模式切换", "Ctrl+Alt+B", () => RunHotkey(ToggleWebMode)),
         };
 
         ApplySettings();

@@ -141,16 +141,10 @@ public partial class MainWindow
         RaiseStateChanged();
     }
 
-    /// <summary>在视频 / 网页两个模式之间切换。</summary>
-    internal void ToggleWebMode()
-    {
-        if (_webMode)
-            ExitWebMode();
-        else
-            EnterWebMode();
-    }
-
-    /// <summary>设置面板里直接选模式:true = 浏览器模式,false = 本地视频模式。</summary>
+    /// <summary>
+    /// 设置面板里直接选模式:true = 浏览器模式,false = 本地视频模式。
+    /// (以前还有个 <c>Ctrl+Alt+B</c> 的全局热键来回切,已经去掉了 —— 改模式现在只走设置面板。)
+    /// </summary>
     internal void SetWebMode(bool web)
     {
         if (web == _webMode)
