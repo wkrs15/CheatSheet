@@ -41,6 +41,13 @@ public partial class MainWindow
     /// <summary>页面里 &lt;video&gt; 的实际倍速(轮询得来,长按快进结束时还原到它)。</summary>
     private double _webSpeed = 1.0;
 
+    /// <summary>页面里 &lt;video&gt; 的当前播放位置 / 总时长(秒),进度条显示的就是它。</summary>
+    private double _webPosition;
+    private double _webDuration;
+
+    /// <summary>我们刚把"按下"喂给网页了,抬起也要照喂 —— 哪怕这时候鼠标已经挪到进度条上面。</summary>
+    private bool _webButtonDown;
+
     /// <summary>轮询页面状态是异步的,加个闸防止重入。</summary>
     private bool _webStatePolling;
 
@@ -100,6 +107,9 @@ public partial class MainWindow
         _webHasVideo = false;
         _webVideoPlaying = false;
         _webPlayedOnce = false;
+        _webButtonDown = false;
+        _webPosition = 0;
+        _webDuration = 0;
 
         ResetPauseEffects();
         ApplyWebModeVisibility();
@@ -192,8 +202,10 @@ public partial class MainWindow
         // 网页模式整块画面都归浏览器,所以要给它留一条专门拖窗口的"标题栏"。
         WebDragStrip.Visibility = _webMode ? Visibility.Visible : Visibility.Collapsed;
 
-        // 网页自己带播放控件,所以进度条只在本地视频模式显示。
-        BottomBar.Visibility = _webMode ? Visibility.Collapsed : Visibility.Visible;
+        // 进度条两种模式都要:网页模式下它的数据来自轮询页面里那个 <video>(见 RefreshProgress)。
+        // 以前这里是"网页自己带播放控件,所以只在本地视频模式显示"—— 但 B 站那套控件要鼠标悬停才出来,
+        // 平常看不到位置,不如我们自己那条一直在。
+        BottomBar.Visibility = Visibility.Visible;
 
         if (_webMode)
         {
@@ -283,6 +295,9 @@ public partial class MainWindow
         _webHasVideo = false;
         _webVideoPlaying = false;
         _webPlayedOnce = false;
+        _webButtonDown = false;
+        _webPosition = 0;
+        _webDuration = 0;
 
         if (e.IsSuccess)
         {
@@ -326,6 +341,7 @@ public partial class MainWindow
     if (!v) return null;
     return {
         p: v.paused,
+        t: v.currentTime,
         r: v.playbackRate,
         d: isFinite(v.duration) ? v.duration : 0
     };
@@ -340,14 +356,18 @@ public partial class MainWindow
             {
                 _webHasVideo = false;
                 _webVideoPlaying = false;
+                _webPosition = 0;
+                _webDuration = 0;
                 return;
             }
 
             using var doc = System.Text.Json.JsonDocument.Parse(json);
             System.Text.Json.JsonElement root = doc.RootElement;
 
-            _webHasVideo = root.GetProperty("d").GetDouble() > 0.01;
+            _webDuration = root.GetProperty("d").GetDouble();
+            _webHasVideo = _webDuration > 0.01;
             _webVideoPlaying = !root.GetProperty("p").GetBoolean();
+            _webPosition = root.GetProperty("t").GetDouble();
 
             if (_webVideoPlaying)
                 _webPlayedOnce = true;
@@ -387,26 +407,35 @@ public partial class MainWindow
 
     // ---------------- 网页模式:手动转发鼠标 + 拖窗口 ----------------
 
-    /// <summary>网页模式:光标在画面上按下。顶部那条留给"拖窗口",其余一律喂给网页。</summary>
+    /// <summary>网页模式:光标在画面上按下。顶部那条留给"拖窗口",底部那条留给进度条,其余一律喂给网页。</summary>
     private void Window_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
         if (!_webMode)
             return;
 
+        Point position = e.GetPosition(this);
+
         // 顶部 28px 是"标题栏"。用 Height 不用 ActualHeight:XAML 里是写死的尺寸,不受布局时机影响。
-        if (e.GetPosition(this).Y <= WebDragStrip.Height)
+        if (position.Y <= WebDragStrip.Height)
         {
             // 这一下必须拦掉,不能让事件继续走到 WebView —— 浏览器按下会自己 SetCapture,
             // 之后 DragMove 内部的系统移动循环就拿不到鼠标了(表现:按住了窗口一动不动)。
             e.Handled = true;
 
-            _dragOrigin = e.GetPosition(this);
+            _dragOrigin = position;
             _dragCandidate = true;
             return;
         }
 
+        // 底部那条是 app 自己的进度条:交给 WPF,别喂给网页(否则拖进度条会顺带点到网页里的东西)。
+        if (IsOverBottomBar(position))
+            return;
+
         if (ForwardWebMouse(CoreWebView2MouseEventKind.LeftButtonDown, e))
+        {
+            _webButtonDown = true;
             e.Handled = true;
+        }
     }
 
     private void Window_PreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
@@ -421,6 +450,12 @@ public partial class MainWindow
             e.Handled = true;
             return;
         }
+
+        // 只要"按下"给过网页,这一步就得给(不管鼠标现在飘到哪儿了),否则网页那边的拖动会卡住。
+        if (!_webButtonDown && IsOverBottomBar(e.GetPosition(this)))
+            return;
+
+        _webButtonDown = false;
 
         if (ForwardWebMouse(CoreWebView2MouseEventKind.LeftButtonUp, e))
             e.Handled = true;
@@ -452,9 +487,20 @@ public partial class MainWindow
             return;
         }
 
+        // 网页那边正按着(在拖进度条之类),那不管鼠标现在在哪儿都要继续喂 ——
+        // 中间断掉的话,网页那边的拖动会卡在半路。
+        if (!_webButtonDown && IsOverBottomBar(e.GetPosition(this)))
+            return;
+
         if (ForwardWebMouse(CoreWebView2MouseEventKind.Move, e))
             e.Handled = true;
     }
+
+    /// <summary>鼠标是不是落在画面底部那条进度条上(那是我们自己的控件,不该喂给网页)。</summary>
+    private bool IsOverBottomBar(Point position)
+        => BottomBar.Visibility == Visibility.Visible
+           && ActualHeight > 1
+           && position.Y >= ActualHeight - BottomBar.ActualHeight;
 
     /// <summary>
     /// 把鼠标事件手动喂给 WebView2。
@@ -609,22 +655,34 @@ public partial class MainWindow
         }
     }
 
-    /// <summary>网页模式的 快进 / 快退。</summary>
-    internal void WebSeekBy(double seconds)
+    /// <summary>网页模式的 快进 / 快退(相对当前位置)。</summary>
+    internal void WebSeekBy(double seconds) => SeekWebVideo(seconds, relative: true);
+
+    /// <summary>把播放位置写到页面里的 &lt;video&gt;(进度条拖动走这里,给的是绝对秒数)。</summary>
+    internal void WebSeekTo(double seconds) => SeekWebVideo(seconds, relative: false);
+
+    private void SeekWebVideo(double seconds, bool relative)
     {
         if (!_webMode)
             return;
 
+        // 先把进度按"已经跳过去了"记一笔,进度条不用干等下一次轮询(最多 200ms)。
+        if (_webDuration > 0.01)
+            _webPosition = Math.Clamp(relative ? _webPosition + seconds : seconds, 0, _webDuration);
+
         string script = "(() => { " + PickMainVideoJs +
             " const v = mainVideo(); if (!v) return;" +
-            " const t = v.currentTime + " + FormatScriptNumber(seconds) + ";" +
-            " const max = isFinite(v.duration) ? v.duration : t;" +
-            " v.currentTime = Math.min(Math.max(t, 0), max); })();";
+            " const max = isFinite(v.duration) ? v.duration : 0;" +
+            (relative
+                ? " const t = v.currentTime + " + FormatScriptNumber(seconds) + ";"
+                : " const t = " + FormatScriptNumber(seconds) + ";") +
+            " v.currentTime = max > 0 ? Math.min(Math.max(t, 0), max) : Math.max(t, 0);" +
+            " })();";
 
         _ = ExecuteWebScriptAsync(script);
     }
 
-    /// <summary>网页模式下的当前播放进度(秒,-1 表示取不到)。供进度条/标题显示。</summary>
+    /// <summary>把一段脚本丢给页面执行。不需要返回值时用它(要返回值得用 ExecuteScriptAsync)。</summary>
     private async Task ExecuteWebScriptAsync(string script)
     {
         try

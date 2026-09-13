@@ -1227,6 +1227,14 @@ public partial class MainWindow : Window
         if (!_ready || _isScrubbing)
             return;
 
+        // 网页模式:进度不是 MediaElement 给的,而是每 200ms 从页面里那个 <video> 问来的
+        // (见 PollWebState)。
+        if (_webMode)
+        {
+            RefreshWebProgress();
+            return;
+        }
+
         if (!Player.NaturalDuration.HasTimeSpan)
         {
             TimeText.Text = "--:-- / --:--";
@@ -1244,6 +1252,27 @@ public partial class MainWindow : Window
 
 
         TimeText.Text = $"{FormatTime(position)} / {FormatTime(total)}";
+    }
+
+    /// <summary>网页模式下的进度显示:总长/位置都来自轮询页面得到的值。</summary>
+    private void RefreshWebProgress()
+    {
+        if (_webDuration <= 0.01)
+        {
+            TimeText.Text = "--:-- / --:--";
+
+            _suppressProgressEvent = true;
+            ProgressSlider.Value = 0;
+            _suppressProgressEvent = false;
+            return;
+        }
+
+        _suppressProgressEvent = true;
+        ProgressSlider.Value = Math.Clamp(_webPosition / _webDuration * 100.0, 0, 100);
+        _suppressProgressEvent = false;
+
+        TimeText.Text = $"{FormatTime(TimeSpan.FromSeconds(_webPosition))} / " +
+                        $"{FormatTime(TimeSpan.FromSeconds(_webDuration))}";
     }
 
     /// <summary>
@@ -1266,22 +1295,30 @@ public partial class MainWindow : Window
         // 圆点也不会停在"手指松开的地方"和画面对不上。
         RefreshProgress();
 
-        if (_isPlaying)
+        // 网页模式下这个轮询定时器还兼着问页面状态(在播没在播、进度多少),
+        // 不能像本地那样"没在播就不重启" —— 那样一拖进度条,暂停变暗/进度更新就全停了。
+        if (IsPlaying || _webMode)
             _timer.Start();
     }
 
     private void Progress_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
     {
-        if (!_ready || _suppressProgressEvent || !Player.NaturalDuration.HasTimeSpan)
+        if (!_ready || _suppressProgressEvent)
             return;
 
-        TimeSpan total = Player.NaturalDuration.TimeSpan;
+        // 本地视频模式的"总长"是 MediaElement 给的,网页模式是从页面轮询来的。
+        double totalSeconds = _webMode
+            ? _webDuration
+            : Player.NaturalDuration.HasTimeSpan ? Player.NaturalDuration.TimeSpan.TotalSeconds : 0;
+
+        if (totalSeconds <= 0.01)
+            return;
 
         if (_isScrubbing)
         {
             // 拖动过程中只更新时间文字,松手后才真正 seek 一次。
-            TimeSpan preview = TimeSpan.FromSeconds(total.TotalSeconds * e.NewValue / 100.0);
-            TimeText.Text = $"{FormatTime(preview)} / {FormatTime(total)}";
+            TimeSpan preview = TimeSpan.FromSeconds(totalSeconds * e.NewValue / 100.0);
+            TimeText.Text = $"{FormatTime(preview)} / {FormatTime(TimeSpan.FromSeconds(totalSeconds))}";
             return;
         }
 
@@ -1291,6 +1328,18 @@ public partial class MainWindow : Window
 
     private void SeekToPercent(double percent)
     {
+        if (_webMode)
+        {
+            if (_webDuration <= 0.01)
+                return;
+
+            // WebSeekTo 会顺手把 _webPosition 记成目标值,所以下面显示的就是跳过去之后的位置。
+            WebSeekTo(_webDuration * Math.Clamp(percent, 0, 100) / 100.0);
+            TimeText.Text = $"{FormatTime(TimeSpan.FromSeconds(_webPosition))} / " +
+                            $"{FormatTime(TimeSpan.FromSeconds(_webDuration))}";
+            return;
+        }
+
         if (!Player.NaturalDuration.HasTimeSpan)
             return;
 
