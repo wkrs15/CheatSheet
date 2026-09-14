@@ -171,9 +171,16 @@ public partial class MainWindow : Window
 
     internal double VolumePercent => _volumePercent;
 
-    internal int SpeedIndex => GetSpeedIndex();
+    internal int SpeedIndex => Math.Clamp(SpeedToIndex(EffectiveSpeed), 0, PlaybackSpeeds.Length - 1);
 
-    internal string SpeedLabel => $"{GetSpeed():0.##}x";
+    internal string SpeedLabel => $"{EffectiveSpeed:0.##}x";
+
+    /// <summary>
+    /// "实际生效"的倍速。网页模式以页面里那个 &lt;video&gt; 为准 ——
+    /// 用户可能在 B 站自己的控制条上改过倍速,那时控制条还显示本地那份就成了假信息
+    /// (显示 1x、其实在 1.5x 播)。
+    /// </summary>
+    private double EffectiveSpeed => _webMode && _webSpeed > 0.01 ? _webSpeed : _speedRatio;
 
     /// <summary>控制条上显示的那行字:本地模式是文件名,网页模式是网页标题 / 当前分P。</summary>
     internal string FileLabel => _webMode ? WebLabel : _fileLabel;
@@ -473,7 +480,7 @@ public partial class MainWindow : Window
         }
     }
 
-    internal void CycleSpeed() => ApplySpeed((GetSpeedIndex() + 1) % PlaybackSpeeds.Length);
+    internal void CycleSpeed() => ApplySpeed((SpeedIndex + 1) % PlaybackSpeeds.Length);
 
     internal void ToggleMute()
     {
@@ -582,8 +589,8 @@ public partial class MainWindow : Window
         _heldGesture = _hotkeyActions.FirstOrDefault(a => a.Key == actionKey)?.Gesture;
 
         // 还原到"按住之前"的倍速:网页模式下实际倍速在页面里(可能被 B 站自己改过),
-        // 所以以轮询到的值为准。
-        _speedBeforeHold = _webMode && _webSpeed > 0.01 ? _webSpeed : GetSpeed();
+        // 所以以轮询到的值为准(EffectiveSpeed 已经替我们分了模式)。
+        _speedBeforeHold = EffectiveSpeed;
 
         _holdTimer.Start();
     }
@@ -1837,9 +1844,6 @@ public partial class MainWindow : Window
 
     private void UpdateHint()
         => HintText.Visibility = Player.Source is null ? Visibility.Visible : Visibility.Collapsed;
-
-    private int GetSpeedIndex()
-        => Math.Clamp(SpeedToIndex(GetSpeed()), 0, PlaybackSpeeds.Length - 1);
 
     private double GetSpeed() => _speedRatio;
 
