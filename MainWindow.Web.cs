@@ -892,7 +892,9 @@ public partial class MainWindow
             " if (!items.length) return null;" +
             " let current = -1;" +
             " const titles = items.map((el, i) => {" +
-            "   if (el.classList.contains('bpx-state-multi-active-item')) current = i;" +
+            // 取第一个带高亮类的:合集视频里可能有多段列表(分P / 合集),
+            // 都带 bpx-state-multi-active-item,取最后一个会指到别段上去。
+            "   if (current < 0 && el.classList.contains('bpx-state-multi-active-item')) current = i;" +
             "   return (el.textContent || '').replace(/\\s+/g, ' ').trim();" +
             " });" +
             " return { t: titles, c: current };" +

@@ -18,6 +18,9 @@ public partial class SettingsWindow : Window
     private HotkeyAction? _recordingAction;
     private bool _syncing;
 
+    /// <summary>检查到的新版本(没有就是 null)。"打开下载页"用它。</summary>
+    private UpdateChecker.UpdateInfo? _availableUpdate;
+
     /// <summary>
     /// XAML 里滑块/下拉的初始值会在 InitializeComponent 期间就触发一次事件,
     /// 那时窗口还没 Loaded。不挡住的话,一打开设置窗口就会把画面透明度和音量刷成默认值。
@@ -36,6 +39,8 @@ public partial class SettingsWindow : Window
 
         HotkeyList.ItemsSource = _main.HotkeyActions;
         _main.StateChanged += OnMainStateChanged;
+
+        VersionText.Text = _main.VersionLabel;
 
         Loaded += (_, _) =>
         {
@@ -83,6 +88,7 @@ public partial class SettingsWindow : Window
 
             ResumeBox.IsChecked = _main.RememberPosition;
             LoopBox.IsChecked = _main.LoopPlayback;
+            AutoUpdateBox.IsChecked = _main.CheckUpdatesOnStart;
 
             // 播放模式:本地视频 / 浏览器。
             if (_main.IsWebMode)
@@ -187,6 +193,59 @@ public partial class SettingsWindow : Window
 
     private void Loop_Click(object sender, RoutedEventArgs e)
         => _main.LoopPlayback = LoopBox.IsChecked == true;
+
+    // ---------------- 关于 / 检查更新 ----------------
+
+    private void AutoUpdate_Click(object sender, RoutedEventArgs e)
+        => _main.CheckUpdatesOnStart = AutoUpdateBox.IsChecked == true;
+
+    /// <summary>
+    /// 手动检查更新。
+    /// <para>
+    /// 事件处理器本身是同步的,真正的检查丢给 <see cref="CheckForUpdatesCoreAsync"/> ——
+    /// 这样不用写 <c>async void</c>,异常也不会跑到没人接的地方去。
+    /// </para>
+    /// </summary>
+    private void CheckUpdate_Click(object sender, RoutedEventArgs e) => _ = CheckForUpdatesCoreAsync();
+
+    private async Task CheckForUpdatesCoreAsync()
+    {
+        CheckUpdateButton.IsEnabled = false;
+        UpdateStatusText.Text = "正在检查…";
+
+        try
+        {
+            MainWindow.UpdateCheckResult result = await MainWindow.CheckForUpdatesAsync();
+
+            if (!result.Succeeded)
+            {
+                // "查不到"和"已经是最新"必须分开说,不然用户会以为自己是最新版。
+                UpdateStatusText.Text = "检查失败:网络不通,或者访问 GitHub 受限";
+                _availableUpdate = null;
+            }
+            else if (result.Update is null)
+            {
+                UpdateStatusText.Text = $"已经是最新版本({_main.VersionLabel})";
+                _availableUpdate = null;
+            }
+            else
+            {
+                _availableUpdate = result.Update;
+                UpdateStatusText.Text = $"发现新版本 {result.Update.Tag}(当前 {_main.VersionLabel})";
+            }
+
+            DownloadButton.IsEnabled = _availableUpdate is not null;
+        }
+        finally
+        {
+            CheckUpdateButton.IsEnabled = true;
+        }
+    }
+
+    private void OpenDownloadPage_Click(object sender, RoutedEventArgs e)
+        => MainWindow.OpenInBrowser(_availableUpdate?.PageUrl ?? UpdateChecker.ReleasesPage);
+
+    private void OpenConfigFolder_Click(object sender, RoutedEventArgs e) => MainWindow.OpenConfigFolder();
 
     private void ResetHotkeys_Click(object sender, RoutedEventArgs e) => _main.ResetHotkeys();
 

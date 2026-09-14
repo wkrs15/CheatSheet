@@ -43,6 +43,12 @@ public sealed class AppSettings
     /// <summary>是否记住本地视频的播放进度(下次打开同一个文件自动接着看)。</summary>
     public bool RememberPosition { get; set; } = true;
 
+    /// <summary>启动时自动检查更新(一天最多查一次,见 MainWindow.AutoCheckUpdatesAsync)。</summary>
+    public bool CheckUpdatesOnStart { get; set; } = true;
+
+    /// <summary>上次检查更新的时间。用它实现"一天最多自动查一次"。</summary>
+    public DateTime? LastUpdateCheck { get; set; }
+
     /// <summary>网页模式打开时加载的首页。</summary>
     public string WebHomeUrl { get; set; } = "https://www.bilibili.com";
 

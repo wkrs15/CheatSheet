@@ -250,6 +250,78 @@
                     </ScrollViewer>
                 </DockPanel>
             </TabItem>
+            <!-- ============ 关于 ============ -->
+            <TabItem Header="关于">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel Style="{StaticResource PagePanel}">
+
+                        <TextBlock Text="版本" Style="{StaticResource SectionTitle}" />
+
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="96" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock x:Name="VersionText"
+                                       Text="v0.0.0"
+                                       Style="{StaticResource SettingCaption}" />
+                            <TextBlock x:Name="UpdateStatusText"
+                                       Grid.Column="1"
+                                       Margin="0,0,10,0"
+                                       VerticalAlignment="Center"
+                                       TextTrimming="CharacterEllipsis"
+                                       Foreground="{DynamicResource SecondaryTextBrush}"
+                                       Text="还没检查过更新" />
+                            <Button x:Name="CheckUpdateButton"
+                                    Grid.Column="2"
+                                    Content="检查更新"
+                                    Height="26"
+                                    Padding="12,0"
+                                    Click="CheckUpdate_Click" />
+                        </Grid>
+
+                        <CheckBox x:Name="AutoUpdateBox"
+                                  Margin="0,12,0,0"
+                                  Content="启动时自动检查更新(一天最多一次)"
+                                  Click="AutoUpdate_Click" />
+
+                        <TextBlock Margin="0,14,0,0"
+                                   TextWrapping="Wrap"
+                                   Foreground="{DynamicResource SecondaryTextBrush}"
+                                   Text="程序是绿色版,更新方式就是下载新的 zip 解压替换 —— 所以这里只负责告诉你有没有新版。" />
+
+                        <Border Style="{StaticResource SectionRule}" />
+
+                        <TextBlock Text="其他" Style="{StaticResource SectionTitle}" />
+
+                        <StackPanel Orientation="Horizontal">
+                            <Button x:Name="DownloadButton"
+                                    Content="打开下载页"
+                                    Height="26"
+                                    Padding="12,0"
+                                    IsEnabled="False"
+                                    Click="OpenDownloadPage_Click" />
+                            <Button Content="打开配置目录"
+                                    Height="26"
+                                    Padding="12,0"
+                                    Margin="8,0,0,0"
+                                    Click="OpenConfigFolder_Click" />
+                        </StackPanel>
+
+                        <TextBlock Margin="0,12,0,0"
+                                   TextWrapping="Wrap"
+                                   Foreground="{DynamicResource SecondaryTextBrush}"
+                                   Text="设置文件 settings.json 和崩溃日志 crash-*.log 都在 %AppData%\CheatSheet 里。" />
+
+                        <TextBlock Margin="0,14,0,0"
+                                   TextWrapping="Wrap"
+                                   Foreground="{DynamicResource SecondaryTextBrush}"
+                                   Text="CheatSheet —— 边玩游戏边看攻略的置顶小窗播放器。" />
+
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
         </TabControl>
 
         <DockPanel Grid.Row="1" Margin="0,12,0,0" LastChildFill="False">

@@ -778,6 +778,9 @@ public partial class MainWindow : Window
             EnterWebMode();
 
         RaiseStateChanged();
+
+        // 顺手看一眼有没有新版本(默认开着"一天最多查一次",只在发现新版时提示一句)。
+        _ = AutoCheckUpdatesAsync();
     }
 
     private void OnClosing(object? sender, CancelEventArgs e)
