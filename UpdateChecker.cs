@@ -19,7 +19,7 @@ internal static class UpdateChecker
     internal const string ReleasesPage = "https://github.com/wkrs15/CheatSheet/releases";
 
     /// <summary>一个可用的新版本。</summary>
-    internal sealed record UpdateInfo(Version Version, string Tag, string PageUrl);
+    internal sealed record UpdateInfo(Version Version, string Tag, string PageUrl, string? DownloadUrl);
 
     /// <summary>当前程序的版本(取程序集版本,和 csproj 里的 &lt;Version&gt; 一致)。</summary>
     internal static Version CurrentVersion { get; } =
@@ -58,13 +58,45 @@ internal static class UpdateChecker
                 ? urlElement.GetString() ?? ReleasesPage
                 : ReleasesPage;
 
-            return new UpdateInfo(version, tag, pageUrl);
+            return new UpdateInfo(version, tag, pageUrl, FindPackageUrl(root));
         }
         catch
         {
             // 断网、代理不通、JSON 变了……都当"查不到"。
             return null;
         }
+    }
+
+    /// <summary>
+    /// 从 Release 的资产里挑出自动更新要下载的那个包
+    /// (构建产物叫 <c>CheatSheet-vX.Y-win-x64.zip</c>,这里按后缀认)。
+    /// </summary>
+    private static string? FindPackageUrl(JsonElement release)
+    {
+        if (!release.TryGetProperty("assets", out JsonElement assets)
+            || assets.ValueKind != JsonValueKind.Array)
+        {
+            return null;
+        }
+
+        foreach (JsonElement asset in assets.EnumerateArray())
+        {
+            string name = asset.TryGetProperty("name", out JsonElement nameElement)
+                ? nameElement.GetString() ?? string.Empty
+                : string.Empty;
+
+            if (!name.EndsWith("-win-x64.zip", StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            string url = asset.TryGetProperty("browser_download_url", out JsonElement urlElement)
+                ? urlElement.GetString() ?? string.Empty
+                : string.Empty;
+
+            if (url.Length > 0)
+                return url;
+        }
+
+        return null;
     }
 
     /// <summary>这个版本是不是比当前的新。</summary>

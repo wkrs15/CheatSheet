@@ -295,11 +295,19 @@
 
                         <TextBlock Text="其他" Style="{StaticResource SectionTitle}" />
 
-                        <StackPanel Orientation="Horizontal">
+                        <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
+                            <Button x:Name="InstallUpdateButton"
+                                    Content="下载并更新"
+                                    Height="26"
+                                    Padding="12,0"
+                                    IsEnabled="False"
+                                    Click="InstallUpdate_Click"
+                                    ToolTip="下载新版本,替换后自动重启" />
                             <Button x:Name="DownloadButton"
                                     Content="打开下载页"
                                     Height="26"
                                     Padding="12,0"
+                                    Margin="8,0,0,0"
                                     IsEnabled="False"
                                     Click="OpenDownloadPage_Click" />
                             <Button Content="打开配置目录"
@@ -308,6 +316,11 @@
                                     Margin="8,0,0,0"
                                     Click="OpenConfigFolder_Click" />
                         </StackPanel>
+
+                        <TextBlock Margin="0,10,0,0"
+                                   TextWrapping="Wrap"
+                                   Foreground="{DynamicResource SecondaryTextBrush}"
+                                   Text="自动更新会把新版本解压到临时目录,等你关掉程序后再替换(程序不能覆盖运行中的自己),然后自动重新打开 —— 始终以直接下载 zip 替换为准,失败时设置里的下载页永远可用。" />
 
                         <TextBlock Margin="0,12,0,0"
                                    TextWrapping="Wrap"

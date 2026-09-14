@@ -235,6 +235,7 @@ public partial class SettingsWindow : Window
             }
 
             DownloadButton.IsEnabled = _availableUpdate is not null;
+            InstallUpdateButton.IsEnabled = _availableUpdate is not null;
         }
         finally
         {
@@ -246,6 +247,78 @@ public partial class SettingsWindow : Window
         => MainWindow.OpenInBrowser(_availableUpdate?.PageUrl ?? UpdateChecker.ReleasesPage);
 
     private void OpenConfigFolder_Click(object sender, RoutedEventArgs e) => MainWindow.OpenConfigFolder();
+
+    // ---------------- 自动更新(下载 → 替换 → 重启) ----------------
+
+    private void InstallUpdate_Click(object sender, RoutedEventArgs e) => _ = InstallUpdateCoreAsync();
+
+    /// <summary>
+    /// 下载新版本并交给替换器。流程:先把东西全准备好(下载 + 解压 + 校验),
+    /// 确认无误后才问用户"现在换吗" —— 替换会让程序重启,不该让人白等一场。
+    /// </summary>
+    private async Task InstallUpdateCoreAsync()
+    {
+        if (_availableUpdate is null)
+            return;
+
+        InstallUpdateButton.IsEnabled = false;
+        DownloadButton.IsEnabled = false;
+
+        try
+        {
+            if (!UpdateInstaller.CanWriteInstallDirectory())
+            {
+                UpdateStatusText.Text = "程序所在目录没有写权限(比如装在 Program Files),请点「打开下载页」手动更新";
+                return;
+            }
+
+            var progress = new Progress<double>(value => UpdateStatusText.Text = $"正在下载… {value:0}%");
+
+            string? zipPath = await UpdateInstaller.DownloadAsync(_availableUpdate, progress);
+
+            if (zipPath is null)
+            {
+                UpdateStatusText.Text = "下载失败:网络不通或被限流 —— 可以点「打开下载页」手动下载";
+                return;
+            }
+
+            UpdateStatusText.Text = "正在解压…";
+
+            string? sourceFolder = await Task.Run(() => UpdateInstaller.Extract(zipPath));
+
+            if (sourceFolder is null)
+            {
+                UpdateStatusText.Text = "解压失败:下载到的文件不完整,请点「打开下载页」手动下载";
+                return;
+            }
+
+            UpdateStatusText.Text = $"已准备好 {_availableUpdate.Tag}";
+
+            MessageBoxResult answer = MessageBox.Show(
+                this,
+                $"即将关闭 CheatSheet,把程序目录替换成 {_availableUpdate.Tag},然后自动重新打开。\n\n" +
+                $"被替换的目录:\n{UpdateInstaller.InstallFolder}\n\n现在就开始吗?",
+                "安装更新",
+                MessageBoxButton.OKCancel,
+                MessageBoxImage.Question);
+
+            if (answer != MessageBoxResult.OK)
+            {
+                UpdateStatusText.Text = "已取消(新版本已下载好,随时可以再点「下载并更新」)";
+                return;
+            }
+
+            UpdateStatusText.Text = "正在替换并重启…";
+
+            if (!UpdateInstaller.ApplyAndRestart(sourceFolder, () => _main.Close()))
+                UpdateStatusText.Text = "启动替换器失败(可能被安全软件拦了),请手动替换";
+        }
+        finally
+        {
+            InstallUpdateButton.IsEnabled = _availableUpdate is not null;
+            DownloadButton.IsEnabled = _availableUpdate is not null;
+        }
+    }
 
     private void ResetHotkeys_Click(object sender, RoutedEventArgs e) => _main.ResetHotkeys();
 

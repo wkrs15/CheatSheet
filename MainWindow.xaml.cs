@@ -779,6 +779,9 @@ public partial class MainWindow : Window
 
         RaiseStateChanged();
 
+        // 上次自动更新的结果:成功就清掉临时文件,失败就提示一句(见 UpdateInstaller)。
+        UpdateInstaller.ReportLastResult();
+
         // 顺手看一眼有没有新版本(默认开着"一天最多查一次",只在发现新版时提示一句)。
         _ = AutoCheckUpdatesAsync();
     }
