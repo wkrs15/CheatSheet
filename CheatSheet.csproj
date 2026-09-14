@@ -12,7 +12,7 @@
     <AssemblyName>CheatSheet</AssemblyName>
     <RootNamespace>CheatSheet</RootNamespace>
     <ApplicationTitle>CheatSheet</ApplicationTitle>
-    <Version>0.6.0</Version>
+    <Version>0.7.0</Version>
   </PropertyGroup>
 
   <ItemGroup>
