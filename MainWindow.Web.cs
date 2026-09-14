@@ -402,6 +402,18 @@ public partial class MainWindow
 
         try
         {
+            // 先在轮询里兜一道地址:页面自己切分P 是 SPA 内部跳转(B 站用 history API),
+            // 不一定触发 NavigationCompleted / SourceChanged,地址一变这里就能跟上,
+            // 下拉栏的"当前第几P"也就不会停在旧值上。比较字符串而已,很便宜。
+            string current = core.Source;
+
+            if (!string.Equals(current, _webCurrentUrl, StringComparison.Ordinal))
+            {
+                _webCurrentUrl = current;
+                UpdateBiliParts();
+                RaiseStateChanged();
+            }
+
             string json = await core.ExecuteScriptAsync(script);
 
             // 页面里没有 <video>(比如 B 站首页)—— 这不算"暂停"。
