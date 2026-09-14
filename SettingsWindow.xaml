@@ -5,10 +5,10 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         mc:Ignorable="d"
-        d:DesignHeight="600" d:DesignWidth="580"
+        d:DesignHeight="560" d:DesignWidth="600"
         Title="设置 · CheatSheet"
-        Width="580" Height="680"
-        MinWidth="520" MinHeight="440"
+        Width="600" Height="560"
+        MinWidth="540" MinHeight="440"
         WindowStartupLocation="CenterScreen"
         ShowInTaskbar="False"
         FontFamily="Microsoft YaHei UI"
@@ -20,7 +20,7 @@
         PreviewKeyDown="Window_PreviewKeyDown">
     <Window.Resources>
         <Style x:Key="SectionTitle" TargetType="TextBlock">
-            <Setter Property="FontSize" Value="14" />
+            <Setter Property="FontSize" Value="13" />
             <Setter Property="FontWeight" Value="SemiBold" />
             <Setter Property="Margin" Value="0,0,0,10" />
         </Style>
@@ -30,6 +30,13 @@
             <Setter Property="Foreground" Value="{DynamicResource SecondaryTextBrush}" />
         </Style>
 
+        <!-- 分区之间的细线:半透明灰,浅色 / 深色主题下都看得见 -->
+        <Style x:Key="SectionRule" TargetType="Border">
+            <Setter Property="Height" Value="1" />
+            <Setter Property="Margin" Value="0,18,0,16" />
+            <Setter Property="Background" Value="#22808080" />
+        </Style>
+
         <Style x:Key="HotkeyButton" TargetType="Button">
             <Setter Property="FontFamily" Value="Consolas" />
             <Setter Property="MinWidth" Value="140" />
@@ -37,164 +44,211 @@
             <Setter Property="Margin" Value="8,0" />
             <Setter Property="Focusable" Value="False" />
         </Style>
+
+        <!-- 每个标签页的公共留白 -->
+        <Style x:Key="PagePanel" TargetType="StackPanel">
+            <Setter Property="Margin" Value="4,12,10,10" />
+        </Style>
     </Window.Resources>
 
-    <Grid Margin="18,14,18,16">
+    <Grid Margin="16,10,16,14">
         <Grid.RowDefinitions>
-            <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
-        <StackPanel Grid.Row="0">
-            <TextBlock Text="播放模式" Style="{StaticResource SectionTitle}" />
+        <TabControl Grid.Row="0" Background="Transparent" BorderThickness="0">
 
-            <RadioButton x:Name="VideoModeBox" GroupName="PlayMode"
-                         Content="本地视频模式(播放视频文件)"
-                         Margin="0,0,0,6"
-                         Checked="PlayMode_Changed" />
-            <RadioButton x:Name="WebModeBox" GroupName="PlayMode"
-                         Content="浏览器模式(播放网页视频,如 B 站)"
-                         Checked="PlayMode_Changed" />
+            <!-- ============ 播放 ============ -->
+            <TabItem Header="播放">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel Style="{StaticResource PagePanel}">
 
-            <Grid Margin="0,10,0,0">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="96" />
-                    <ColumnDefinition Width="*" />
-                </Grid.ColumnDefinitions>
-                <TextBlock Text="浏览器首页" Style="{StaticResource SettingCaption}" />
-                <hc:TextBox x:Name="HomeUrlBox"
-                            Grid.Column="1"
-                            Height="26"
-                            VerticalContentAlignment="Center"
-                            TextChanged="HomeUrl_Changed"
-                            ToolTip="浏览器模式启动时打开的网址" />
-            </Grid>
+                        <TextBlock Text="播放模式" Style="{StaticResource SectionTitle}" />
+                        <RadioButton x:Name="VideoModeBox" GroupName="PlayMode"
+                                     Content="本地视频模式(播放视频文件)"
+                                     Margin="0,0,0,6"
+                                     Checked="PlayMode_Changed" />
+                        <RadioButton x:Name="WebModeBox" GroupName="PlayMode"
+                                     Content="浏览器模式(播放网页视频,如 B 站)"
+                                     Checked="PlayMode_Changed" />
 
-            <TextBlock Text="显示与声音" Style="{StaticResource SectionTitle}" Margin="0,18,0,10" />
+                        <Grid Margin="0,12,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="96" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Text="浏览器首页" Style="{StaticResource SettingCaption}" />
+                            <hc:TextBox x:Name="HomeUrlBox"
+                                        Grid.Column="1"
+                                        Height="26"
+                                        VerticalContentAlignment="Center"
+                                        TextChanged="HomeUrl_Changed"
+                                        ToolTip="浏览器模式启动时打开的网址" />
+                        </Grid>
 
-            <Grid>
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="96" />
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="48" />
-                </Grid.ColumnDefinitions>
-                <TextBlock Text="画面透明度" Style="{StaticResource SettingCaption}" />
-                <Slider x:Name="OpacitySlider" Grid.Column="1"
-                        Minimum="30" Maximum="100" Value="100"
-                        VerticalAlignment="Center"
-                        ValueChanged="Opacity_ValueChanged"
-                        ToolTip="只让视频画面变透明,进度条和设置窗口不受影响" />
-                <TextBlock x:Name="OpacityValueText" Grid.Column="2"
-                           Text="100%"
-                           HorizontalAlignment="Right"
-                           Style="{StaticResource SettingCaption}" />
-            </Grid>
+                        <Border Style="{StaticResource SectionRule}" />
 
-            <Grid Margin="0,8,0,0">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="96" />
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="48" />
-                </Grid.ColumnDefinitions>
-                <TextBlock Text="音量" Style="{StaticResource SettingCaption}" />
-                <Slider x:Name="VolumeSlider" Grid.Column="1"
-                        Minimum="0" Maximum="100" Value="80"
-                        VerticalAlignment="Center"
-                        ValueChanged="Volume_ValueChanged" />
-                <TextBlock x:Name="VolumeValueText" Grid.Column="2"
-                           Text="80%"
-                           HorizontalAlignment="Right"
-                           Style="{StaticResource SettingCaption}" />
-            </Grid>
+                        <TextBlock Text="暂停时" Style="{StaticResource SectionTitle}" />
+                        <RadioButton x:Name="PauseNothingBox" GroupName="PauseBehavior"
+                                     Content="什么都不做"
+                                     Margin="0,0,0,6"
+                                     Checked="PauseBehavior_Changed" />
+                        <RadioButton x:Name="PauseHideBox" GroupName="PauseBehavior"
+                                     Content="隐藏视频窗口"
+                                     Margin="0,0,0,6"
+                                     Checked="PauseBehavior_Changed" />
+                        <RadioButton x:Name="PauseDimBox" GroupName="PauseBehavior"
+                                     Content="把画面调暗到 30%(推荐)"
+                                     Checked="PauseBehavior_Changed" />
 
-            <Grid Margin="0,8,0,0">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="96" />
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="48" />
-                </Grid.ColumnDefinitions>
-                <TextBlock Text="播放倍速" Style="{StaticResource SettingCaption}" />
-                <hc:ComboBox x:Name="SpeedBox" Grid.Column="1"
-                             Width="96" Height="26"
-                             HorizontalAlignment="Left"
-                             VerticalContentAlignment="Center"
-                             SelectionChanged="Speed_Changed">
-                    <ComboBoxItem Content="0.5x" />
-                    <ComboBoxItem Content="0.75x" />
-                    <ComboBoxItem Content="1.0x" />
-                    <ComboBoxItem Content="1.25x" />
-                    <ComboBoxItem Content="1.5x" />
-                    <ComboBoxItem Content="2.0x" />
-                </hc:ComboBox>
-            </Grid>
+                        <Border Style="{StaticResource SectionRule}" />
 
-            <CheckBox x:Name="ProportionalBox"
-                      Margin="0,12,0,0"
-                      Content="拖动窗口边缘时保持等比例(按视频比例缩放)"
-                      Click="Proportional_Click" />
+                        <TextBlock Text="进度" Style="{StaticResource SectionTitle}" />
+                        <CheckBox x:Name="ResumeBox"
+                                  Content="记住本地视频的播放进度(下次打开接着看)"
+                                  Click="Resume_Click" />
 
-            <CheckBox x:Name="ResumeBox"
-                      Margin="0,8,0,0"
-                      Content="记住本地视频的播放进度(下次打开接着看)"
-                      Click="Resume_Click" />
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
 
-            <TextBlock Text="暂停时" Style="{StaticResource SectionTitle}" Margin="0,18,0,8" />
+            <!-- ============ 显示与声音 ============ -->
+            <TabItem Header="显示与声音">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel Style="{StaticResource PagePanel}">
 
-            <RadioButton x:Name="PauseNothingBox" GroupName="PauseBehavior"
-                         Content="什么都不做"
-                         Margin="0,0,0,6"
-                         Checked="PauseBehavior_Changed" />
-            <RadioButton x:Name="PauseHideBox" GroupName="PauseBehavior"
-                         Content="隐藏视频窗口"
-                         Margin="0,0,0,6"
-                         Checked="PauseBehavior_Changed" />
-            <RadioButton x:Name="PauseDimBox" GroupName="PauseBehavior"
-                         Content="把画面调暗到 30%(推荐)"
-                         Checked="PauseBehavior_Changed" />
-        </StackPanel>
+                        <TextBlock Text="画面" Style="{StaticResource SectionTitle}" />
 
-        <DockPanel Grid.Row="1" Margin="0,20,0,0" LastChildFill="True">
-            <StackPanel DockPanel.Dock="Top">
-                <TextBlock Text="全局热键" Style="{StaticResource SectionTitle}" />
-                <TextBlock Text="点右侧按键后按下新的组合键即完成改键(Esc 取消)。不带 Ctrl/Alt 等修饰键的单键也可以,但单键会抢占全局输入,建议用 F1-F12 这类功能键。全局热键在游戏全屏、播放窗口失焦时同样生效。"
-                           TextWrapping="Wrap"
-                           Margin="0,0,0,6"
-                           Foreground="{DynamicResource SecondaryTextBrush}" />
-            </StackPanel>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="96" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="48" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Text="透明度" Style="{StaticResource SettingCaption}" />
+                            <Slider x:Name="OpacitySlider" Grid.Column="1"
+                                    Minimum="30" Maximum="100" Value="100"
+                                    VerticalAlignment="Center"
+                                    ValueChanged="Opacity_ValueChanged"
+                                    ToolTip="只让视频画面变透明,进度条和设置窗口不受影响" />
+                            <TextBlock x:Name="OpacityValueText" Grid.Column="2"
+                                       Text="100%"
+                                       HorizontalAlignment="Right"
+                                       Style="{StaticResource SettingCaption}" />
+                        </Grid>
 
-            <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="0,0,8,0">
-                <ItemsControl x:Name="HotkeyList">
-                    <ItemsControl.ItemTemplate>
-                        <DataTemplate>
-                            <Grid Margin="0,2">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="Auto" />
-                                    <ColumnDefinition Width="Auto" />
-                                </Grid.ColumnDefinitions>
-                                <TextBlock Text="{Binding Name}" VerticalAlignment="Center" />
-                                <Button Grid.Column="1"
-                                        Style="{StaticResource HotkeyButton}"
-                                        Content="{Binding Gesture}"
-                                        Click="HotkeyCapture_Click"
-                                        Tag="{Binding}" />
-                                <TextBlock Grid.Column="2"
-                                           Width="112"
-                                           Margin="6,0,0,0"
-                                           VerticalAlignment="Center"
-                                           Text="{Binding Status}"
-                                           TextTrimming="CharacterEllipsis"
-                                           Foreground="{DynamicResource SecondaryTextBrush}" />
-                            </Grid>
-                        </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                </ItemsControl>
-            </ScrollViewer>
-        </DockPanel>
+                        <CheckBox x:Name="ProportionalBox"
+                                  Margin="0,12,0,0"
+                                  Content="拖动窗口边缘时保持等比例(按视频比例缩放)"
+                                  Click="Proportional_Click" />
 
-        <DockPanel Grid.Row="2" Margin="0,16,0,0" LastChildFill="False">
-            <Button DockPanel.Dock="Left" Content="恢复默认快捷键" Click="ResetHotkeys_Click" />
+                        <Border Style="{StaticResource SectionRule}" />
+
+                        <TextBlock Text="声音与速度" Style="{StaticResource SectionTitle}" />
+
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="96" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="48" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Text="音量" Style="{StaticResource SettingCaption}" />
+                            <Slider x:Name="VolumeSlider" Grid.Column="1"
+                                    Minimum="0" Maximum="100" Value="80"
+                                    VerticalAlignment="Center"
+                                    ValueChanged="Volume_ValueChanged" />
+                            <TextBlock x:Name="VolumeValueText" Grid.Column="2"
+                                       Text="80%"
+                                       HorizontalAlignment="Right"
+                                       Style="{StaticResource SettingCaption}" />
+                        </Grid>
+
+                        <Grid Margin="0,12,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="96" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Text="播放倍速" Style="{StaticResource SettingCaption}" />
+                            <hc:ComboBox x:Name="SpeedBox" Grid.Column="1"
+                                         Width="120" Height="26"
+                                         HorizontalAlignment="Left"
+                                         VerticalContentAlignment="Center"
+                                         SelectionChanged="Speed_Changed">
+                                <ComboBoxItem Content="0.5x" />
+                                <ComboBoxItem Content="0.75x" />
+                                <ComboBoxItem Content="1.0x" />
+                                <ComboBoxItem Content="1.25x" />
+                                <ComboBoxItem Content="1.5x" />
+                                <ComboBoxItem Content="2.0x" />
+                            </hc:ComboBox>
+                        </Grid>
+
+                        <TextBlock Margin="0,16,0,0"
+                                   TextWrapping="Wrap"
+                                   Foreground="{DynamicResource SecondaryTextBrush}"
+                                   Text="透明度和音量也能直接用快捷键调,不必开这个窗口。" />
+
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+
+            <!-- ============ 快捷键 ============ -->
+            <TabItem Header="快捷键">
+                <DockPanel Margin="4,12,10,10" LastChildFill="True">
+
+                    <StackPanel DockPanel.Dock="Top">
+                        <TextBlock Text="全局热键" Style="{StaticResource SectionTitle}" />
+                        <TextBlock TextWrapping="Wrap"
+                                   Margin="0,0,0,8"
+                                   Foreground="{DynamicResource SecondaryTextBrush}"
+                                   Text="点右侧按键后按下新的组合键即完成改键(Esc 取消)。不带 Ctrl/Alt 的单键也行,但会抢占全局输入,建议用 F1-F12 这类功能键 —— 全局热键在游戏全屏、播放窗口失焦时同样生效。" />
+                        <DockPanel LastChildFill="False" Margin="0,0,0,8">
+                            <TextBlock DockPanel.Dock="Left"
+                                       VerticalAlignment="Center"
+                                       Foreground="{DynamicResource SecondaryTextBrush}"
+                                       Text="改完即时生效,自动保存。" />
+                            <Button DockPanel.Dock="Right"
+                                    Content="恢复默认"
+                                    Height="26"
+                                    Padding="12,0"
+                                    Click="ResetHotkeys_Click" />
+                        </DockPanel>
+                    </StackPanel>
+
+                    <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="0,0,8,0">
+                        <ItemsControl x:Name="HotkeyList">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Grid Margin="0,2">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Text="{Binding Name}" VerticalAlignment="Center" />
+                                        <Button Grid.Column="1"
+                                                Style="{StaticResource HotkeyButton}"
+                                                Content="{Binding Gesture}"
+                                                Click="HotkeyCapture_Click"
+                                                Tag="{Binding}" />
+                                        <TextBlock Grid.Column="2"
+                                                   Width="112"
+                                                   Margin="6,0,0,0"
+                                                   VerticalAlignment="Center"
+                                                   Text="{Binding Status}"
+                                                   TextTrimming="CharacterEllipsis"
+                                                   Foreground="{DynamicResource SecondaryTextBrush}" />
+                                    </Grid>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </ScrollViewer>
+                </DockPanel>
+            </TabItem>
+        </TabControl>
+
+        <DockPanel Grid.Row="1" Margin="0,12,0,0" LastChildFill="False">
             <Button DockPanel.Dock="Right" Content="关闭" Width="96" Click="Close_Click" />
         </DockPanel>
     </Grid>

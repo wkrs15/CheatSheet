@@ -186,7 +186,7 @@ public partial class MainWindow : Window
 
     /// <summary>
     /// 下拉栏里的一项。<see cref="Index"/> 是"选中它之后要拿这个值干什么"的编号:
-    /// 网页模式下是 B 站的第几P(从 1 开始),本地模式下是播放列表里的下标。
+    /// 网页模式下是选集列表里的第几项(从 0 开始),本地模式下是播放列表里的下标。
     /// </summary>
     internal sealed record ChapterItem(int Index, string Label, bool IsCurrent);
 
@@ -235,7 +235,7 @@ public partial class MainWindow : Window
     private void EnsureChapters()
     {
         string signature = _webMode
-            ? $"w|{_webPartsVersion}|{_webCurrentPage}"
+            ? $"w|{_webCurrentPart}|{_webParts.Count}|{(_webParts.Count > 0 ? _webParts[0] : string.Empty)}"
             : $"l|{_playlist.Count}|{_index}|{(_playlist.Count > 0 ? _playlist[0] : string.Empty)}";
 
         if (signature == _chapterSignature)
@@ -247,10 +247,10 @@ public partial class MainWindow : Window
 
         if (_webMode)
         {
-            foreach (WebPart part in WebParts)
-                items.Add(new ChapterItem(part.Page, $"P{part.Page}  {part.Title}", part.Page == _webCurrentPage));
+            for (int i = 0; i < _webParts.Count; i++)
+                items.Add(new ChapterItem(i, _webParts[i], i == _webCurrentPart));
 
-            _chapterIndex = items.FindIndex(item => item.Index == _webCurrentPage);
+            _chapterIndex = _webCurrentPart;
         }
         else
         {
@@ -385,9 +385,26 @@ public partial class MainWindow : Window
         }
     }
 
-    internal void PlayPrevious() => PlayAt(_index - 1);
+    /// <summary>
+    /// 上一集 / 下一集。网页模式下切的是页面里的分P ——
+    /// 以前这里直接走 <see cref="PlayAt"/>,而它一进来就"退出网页模式",
+    /// 于是按一下下一集整个播放器就跳回本地模式了(还什么都不播)。
+    /// </summary>
+    internal void PlayPrevious()
+    {
+        if (_webMode)
+            WebSelectAdjacentPart(-1);
+        else
+            PlayAt(_index - 1);
+    }
 
-    internal void PlayNext() => PlayAt(_index + 1);
+    internal void PlayNext()
+    {
+        if (_webMode)
+            WebSelectAdjacentPart(1);
+        else
+            PlayAt(_index + 1);
+    }
 
     internal void SetVolume(double percent) => ApplyVolume(percent);
 
