@@ -480,15 +480,17 @@ public partial class MainWindow : Window
 
     internal void SetOpacity(double percent)
     {
+        double clamped = Math.Clamp(percent, 30, 100);
+
         // 记下用户真正想要的透明度。暂停时的临时压暗不能写进这里,
         // 否则下次启动会以为用户要的就是那个暗值。
-        _settings.WindowOpacity = Math.Clamp(percent, 30, 100) / 100.0;
+        _settings.WindowOpacity = clamped / 100.0;
 
         // 注意:这里**不要**动 _pausedDimmed。
         // 以前它会把标志清掉,于是"暂停中拖一下透明度滑块"= 撤销压暗,
         // 而下一轮轮询又把它压回去 —— 画面就在 30 / 原透明度之间闪。
         // 用户此刻调的是"恢复播放之后用多少",眼前该保持压暗。
-        ApplyOpacity(_pausedDimmed ? 30 : percent);
+        ApplyOpacity(_pausedDimmed ? 30 : clamped);
     }
 
     /// <summary>
@@ -1328,12 +1330,24 @@ public partial class MainWindow : Window
         RaiseStateChanged();
     }
 
+    /// <summary>
+    /// 透明度快捷键(±10%)。
+    /// <para>
+    /// 必须走 <see cref="SetOpacity"/> 而不是直接 <c>ApplyOpacity</c>:热键调的是
+    /// "用户设定的透明度",和设置窗口的滑块是同一条路径 —— 只改画面的话,
+    /// 设置里的值不动(滑块不跟着走),而且关掉程序就丢了
+    /// (以前就是这样:设置窗口的滑块读的是画面当前值,所以看着像跟随,其实设置值一直是旧的)。
+    /// </para>
+    /// </summary>
     private void ChangeOpacity(double delta)
     {
-        ApplyOpacity(VideoArea.Opacity * 100.0 + delta);
+        SetOpacity(_settings.WindowOpacity * 100.0 + delta);
+
+        // 暂停压暗期间画面保持 30%,这里调的值要等恢复播放才看得见 —— 提示里说清楚。
+        string suffix = _pausedDimmed ? "(暂停中,恢复播放后生效)" : string.Empty;
 
         // 固定 token:连按快捷键时只刷新同一条提示,不会叠一屏。
-        Growl.Info($"画面透明度 {VideoArea.Opacity * 100:0}%", "opacity");
+        Growl.Info($"画面透明度 {_settings.WindowOpacity * 100:0}%{suffix}", "opacity");
     }
 
     // ---------------- 打开与播放 ----------------
