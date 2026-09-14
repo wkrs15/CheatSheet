@@ -67,6 +67,9 @@ public partial class MainWindow
     /// <summary>页面当前地址(控制条上的地址栏显示它)。</summary>
     private string _webCurrentUrl = string.Empty;
 
+    /// <summary>页面自己的标题(控制条在网页模式下显示它,见 <c>WebLabel</c>)。</summary>
+    private string _webTitle = string.Empty;
+
     /// <summary>WebView 还没初始化好时,地址栏输入的地址先寄存在这。</summary>
     private string? _pendingWebUrl;
 
@@ -107,6 +110,9 @@ public partial class MainWindow
         _webMode = true;
         _webCurrentUrl = url ?? _settings.WebHomeUrl;
 
+        // 还没拿到网页标题之前,控制条显示"浏览器模式" —— 不能留着上一条本地视频的文件名。
+        _webTitle = string.Empty;
+
         // 这个轮询定时器现在兼职盯着页面里的 <video>(在播没在播、倍速多少),
         // 所以网页模式下不能停 —— 以前这里会 _timer.Stop(),"暂停自动变暗"因此永远不触发。
         _timer.Start();
@@ -131,8 +137,15 @@ public partial class MainWindow
         _webPosition = 0;
         _webDuration = 0;
 
-        // 下次进来是新页面,选集列表也重新读。
+        // 下次进来是新页面,选集列表和网页标题都重新来。
+        _webTitle = string.Empty;
         ClearWebParts();
+
+        // 控制条 / 窗口标题改回本地那一套(本地视频还开着的话,文件名接着显示)。
+        if (_index >= 0 && _index < _playlist.Count)
+            UpdateFileName();
+        else
+            Title = "CheatSheet";
 
         ResetPauseEffects();
         ApplyWebModeVisibility();
@@ -284,6 +297,13 @@ public partial class MainWindow
             };
 
             core.NavigationCompleted += (_, e) => OnWebNavigationCompleted(e);
+
+            // 页面标题(控制条上那行字):站内切换分P 时它可能不变,但换视频一定会变。
+            core.DocumentTitleChanged += (_, _) =>
+            {
+                _webTitle = core.DocumentTitle ?? string.Empty;
+                UpdateWebLabel();
+            };
 
             // 站内跳转(SPA)不一定触发 NavigationCompleted,地址栏要跟着刷新。
             core.SourceChanged += (_, _) =>
@@ -758,6 +778,22 @@ public partial class MainWindow
         _ = ExecuteWebScriptAsync(script);
     }
 
+    /// <summary>
+    /// 网页模式下把"当前看的是什么"同步给控制条和窗口标题。
+    /// <para>
+    /// 标题是现算的(见 <c>FileLabel</c> / <c>WebLabel</c>),所以这里只需要把窗口标题也刷一遍
+    /// 再通知界面 —— 不然网页模式下任务栏里还挂着本地那个文件名。
+    /// </para>
+    /// </summary>
+    private void UpdateWebLabel()
+    {
+        if (!_webMode)
+            return;
+
+        Title = $"{FileLabel} - CheatSheet";
+        RaiseStateChanged();
+    }
+
     /// <summary>把一段脚本丢给页面执行。不需要返回值时用它(要返回值得用 ExecuteScriptAsync)。</summary>
     private async Task ExecuteWebScriptAsync(string script)
     {
@@ -854,7 +890,9 @@ public partial class MainWindow
                 return;
 
             _webPartsSignature = signature;
-            RaiseStateChanged();
+
+            // 选集列表变了(读到了、或者当前项换了):控制条那行字跟着变。
+            UpdateWebLabel();
         }
         catch
         {
@@ -899,10 +937,10 @@ public partial class MainWindow
 
         _ = ExecuteWebScriptAsync(script);
 
-        // 先按"已经切过去了"记一笔,下拉栏的高亮项不用干等下一次读取(最多 1 秒)。
+        // 先按"已经切过去了"记一笔,下拉栏的高亮项和控制条都立刻跟上,不用干等下一次读取(最多 1 秒)。
         _webCurrentPart = index;
         _webPartsSignature = BuildWebPartsSignature();
-        RaiseStateChanged();
+        UpdateWebLabel();
     }
 
     /// <summary>网页模式的"上一集 / 下一集":切上/下一个分P(到头的方向不做环绕,和站点一致)。</summary>

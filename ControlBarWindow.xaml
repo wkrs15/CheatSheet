@@ -208,7 +208,7 @@
                            VerticalAlignment="Center"
                            TextTrimming="CharacterEllipsis"
                            Foreground="#B3FFFFFF"
-                           Text="把视频拖到这里开始播放" />
+                           Text="CheatSheet" />
 
                 <Border Style="{StaticResource BarSeparator}" />
 

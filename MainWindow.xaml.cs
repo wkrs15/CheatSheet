@@ -175,7 +175,41 @@ public partial class MainWindow : Window
 
     internal string SpeedLabel => $"{GetSpeed():0.##}x";
 
-    internal string FileLabel => _fileLabel;
+    /// <summary>控制条上显示的那行字:本地模式是文件名,网页模式是网页标题 / 当前分P。</summary>
+    internal string FileLabel => _webMode ? WebLabel : _fileLabel;
+
+    /// <summary>
+    /// 网页模式下控制条标题显示什么。
+    /// <para>
+    /// 有选集列表就显示当前那一集的名字(边玩游戏边看时,最需要知道的就是"这是第几集");
+    /// 否则退回网页标题。以前这里没有分支,网页模式下一直挂着本地视频的占位提示
+    /// ("把视频拖到这里开始播放"),看着像坏了。
+    /// </para>
+    /// </summary>
+    private string WebLabel
+    {
+        get
+        {
+            if (_webParts.Count > 0 && _webCurrentPart >= 0 && _webCurrentPart < _webParts.Count)
+                return _webParts[_webCurrentPart];
+
+            return string.IsNullOrWhiteSpace(_webTitle) ? "浏览器模式" : CleanWebTitle(_webTitle);
+        }
+    }
+
+    /// <summary>砍掉网页标题里那串没人关心的站名后缀(B 站是「_哔哩哔哩_bilibili」,很吃宽度)。</summary>
+    private static string CleanWebTitle(string title)
+    {
+        string[] suffixes = { "_哔哩哔哩_bilibili", "_哔哩哔哩", " - 哔哩哔哩", "_哔哩哔哩弹幕网" };
+
+        foreach (string suffix in suffixes)
+        {
+            if (title.EndsWith(suffix, StringComparison.Ordinal))
+                return title[..^suffix.Length].TrimEnd('_', '-', ' ');
+        }
+
+        return title;
+    }
 
     /// <summary>画面透明度(30–100),设置窗口用它显示滑块。</summary>
     internal double VideoOpacityPercent => VideoArea.Opacity * 100.0;
