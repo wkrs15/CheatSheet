@@ -305,6 +305,25 @@ public partial class MainWindow : Window
     }
 
     /// <summary>是否记住本地视频的播放进度(设置窗口里的开关)。</summary>
+    /// <summary>
+    /// 循环播放:播完最后一集绕回第一集(只有一集就是重播自己)。
+    /// 以前配置里有这个字段、但没有任何界面入口,<c>Player_MediaEnded</c> 里那段循环逻辑
+    /// 是一段永远走不到的死代码。
+    /// </summary>
+    internal bool LoopPlayback
+    {
+        get => _settings.Loop;
+        set
+        {
+            if (_settings.Loop == value)
+                return;
+
+            _settings.Loop = value;
+            _settings.Save();
+        }
+    }
+
+    /// <summary>是否记住本地视频的播放进度(设置窗口里的开关)。</summary>
     internal bool RememberPosition
     {
         get => _settings.RememberPosition;
@@ -881,6 +900,38 @@ public partial class MainWindow : Window
     /// <summary>把输入法与这个窗口解绑(见 OnSourceInitialized 的说明)。</summary>
     [DllImport("imm32.dll")]
     private static extern IntPtr ImmAssociateContext(IntPtr hWnd, IntPtr hIMC);
+
+    // ---------------- 单实例:第二个实例转发过来的文件 ----------------
+
+    /// <summary>
+    /// 用户又启动了一次 CheatSheet(双击图标 / 把视频拖到 exe 上),第一个实例收到这次的文件。
+    /// 没带文件就只提示一句"已经在运行了" —— 否则用户会以为程序没启动。
+    /// </summary>
+    internal void OpenFilesFromOutside(IReadOnlyList<string> paths)
+    {
+        var videos = paths
+            .Where(File.Exists)
+            .Where(IsVideoFile)
+            .ToList();
+
+        if (videos.Count == 0)
+        {
+            ShowAlreadyRunningHint();
+            return;
+        }
+
+        _settings.LastDirectory = Path.GetDirectoryName(videos[0]);
+        StartPlaylist(videos, 0);
+    }
+
+    /// <summary>把被热键藏起来的窗口露出来 + 提示一句(单实例提示用)。</summary>
+    private void ShowAlreadyRunningHint()
+    {
+        if (_hiddenByHotkey)
+            ToggleWindowVisible();
+
+        Growl.Info("CheatSheet 已经在运行了 —— 控制条在屏幕顶端,鼠标移上去就会出来。", "running");
+    }
 
     // WM_SIZING 的 wParam:正在拖哪条边 / 哪个角
     private const int WMSZ_LEFT = 1;
@@ -1531,17 +1582,27 @@ public partial class MainWindow : Window
         // 真的播到头了:这一集的进度记录没必要留着。
         ClearResumePosition();
 
-        if (_settings.Loop)
-        {
-            Player.Position = TimeSpan.Zero;
-            Player.Play();
-            return;
-        }
-
-        // 播放列表里还有下一集就自动续播,否则停在末尾。
+        // 播放列表里还有下一集就自动续播。
         if (_index >= 0 && _index < _playlist.Count - 1)
         {
             PlayNext();
+            return;
+        }
+
+        // 开着循环:绕回第一集;只有一集时原地重播(不必重新打开文件,少一次卡顿)。
+        if (_settings.Loop && _playlist.Count > 0)
+        {
+            if (_playlist.Count == 1)
+            {
+                Player.Position = TimeSpan.Zero;
+                Player.Play();
+                _isPlaying = true;
+            }
+            else
+            {
+                PlayAt(0);
+            }
+
             return;
         }
 

@@ -82,6 +82,7 @@ public partial class SettingsWindow : Window
             ProportionalBox.IsChecked = _main.ProportionalResize;
 
             ResumeBox.IsChecked = _main.RememberPosition;
+            LoopBox.IsChecked = _main.LoopPlayback;
 
             // 播放模式:本地视频 / 浏览器。
             if (_main.IsWebMode)
@@ -183,6 +184,9 @@ public partial class SettingsWindow : Window
 
     private void Resume_Click(object sender, RoutedEventArgs e)
         => _main.RememberPosition = ResumeBox.IsChecked == true;
+
+    private void Loop_Click(object sender, RoutedEventArgs e)
+        => _main.LoopPlayback = LoopBox.IsChecked == true;
 
     private void ResetHotkeys_Click(object sender, RoutedEventArgs e) => _main.ResetHotkeys();
 

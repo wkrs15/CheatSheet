@@ -1,8 +1,10 @@
 ﻿<Application x:Class="CheatSheet.App"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:hc="https://handyorg.github.io/handycontrol"
-             StartupUri="MainWindow.xaml">
+             xmlns:hc="https://handyorg.github.io/handycontrol">
+    <!-- 没有 StartupUri:窗口由 App.OnStartup 亲手创建 ——
+         在此之前要先做完"单实例"判断(第二个实例直接退出,不建窗口)
+         和全局异常兜底(见 App.xaml.cs)。 -->
     <Application.Resources>
         <ResourceDictionary>
             <ResourceDictionary.MergedDictionaries>

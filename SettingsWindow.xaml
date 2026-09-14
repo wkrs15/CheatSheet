@@ -104,10 +104,14 @@
 
                         <Border Style="{StaticResource SectionRule}" />
 
-                        <TextBlock Text="进度" Style="{StaticResource SectionTitle}" />
+                        <TextBlock Text="播放行为" Style="{StaticResource SectionTitle}" />
                         <CheckBox x:Name="ResumeBox"
                                   Content="记住本地视频的播放进度(下次打开接着看)"
                                   Click="Resume_Click" />
+                        <CheckBox x:Name="LoopBox"
+                                  Margin="0,10,0,0"
+                                  Content="循环播放:播完最后一集回到第一集"
+                                  Click="Loop_Click" />
 
                     </StackPanel>
                 </ScrollViewer>
