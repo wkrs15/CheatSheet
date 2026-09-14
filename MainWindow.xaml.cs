@@ -218,8 +218,16 @@ public partial class MainWindow : Window
         return title;
     }
 
-    /// <summary>画面透明度(30–100),设置窗口用它显示滑块。</summary>
-    internal double VideoOpacityPercent => VideoArea.Opacity * 100.0;
+    /// <summary>
+    /// 用户设定的画面透明度(30–100),设置窗口用它显示滑块。
+    /// <para>
+    /// 这里读的是<b>用户想要的值</b>,不是 <c>VideoArea.Opacity</c> ——
+    /// 暂停压暗时画面是 30%,拿它当"当前设置"回填滑块,滑块就会跟着显示 30%,
+    /// 用户一动它(或设置窗口开着时的任何一次往返)就会把"暂停压暗"这个临时状态冲掉,
+    /// 于是出现"压暗 30 → 弹回原透明度 → 又压暗"的闪烁。
+    /// </para>
+    /// </summary>
+    internal double VideoOpacityPercent => _settings.WindowOpacity * 100.0;
 
     internal IReadOnlyList<HotkeyAction> HotkeyActions => _hotkeyActions;
 
@@ -475,8 +483,12 @@ public partial class MainWindow : Window
         // 记下用户真正想要的透明度。暂停时的临时压暗不能写进这里,
         // 否则下次启动会以为用户要的就是那个暗值。
         _settings.WindowOpacity = Math.Clamp(percent, 30, 100) / 100.0;
-        _pausedDimmed = false;
-        ApplyOpacity(percent);
+
+        // 注意:这里**不要**动 _pausedDimmed。
+        // 以前它会把标志清掉,于是"暂停中拖一下透明度滑块"= 撤销压暗,
+        // 而下一轮轮询又把它压回去 —— 画面就在 30 / 原透明度之间闪。
+        // 用户此刻调的是"恢复播放之后用多少",眼前该保持压暗。
+        ApplyOpacity(_pausedDimmed ? 30 : percent);
     }
 
     /// <summary>

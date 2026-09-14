@@ -64,6 +64,32 @@ public partial class MainWindow
     /// <summary>轮询页面状态是异步的,加个闸防止重入。</summary>
     private bool _webStatePolling;
 
+    /// <summary>
+    /// "这一轮没读到视频"的连续次数。
+    /// <para>
+    /// 换P、换源、广告切换的一瞬间页面里那个 &lt;video&gt; 会读不到(或时长是 0),
+    /// 但那是暂时的 —— 只读不到一次就把 <c>_webHasVideo</c> 清掉的话,
+    /// "暂停压暗 / 暂停时隐藏"会被撤销、下一轮又加上,画面上就是闪一下。
+    /// 所以连着 <see cref="WebMissingPollTolerance"/> 轮都读不到才认账。
+    /// </para>
+    /// </summary>
+    private int _webMissingPolls;
+
+    /// <summary>连续多少轮读不到视频才认为"页面里真的没有视频"(200ms 一轮 ≈ 1 秒)。</summary>
+    private const int WebMissingPollTolerance = 5;
+
+    /// <summary>这一轮没读到视频:连续几轮都读不到才把状态清成"没有视频"。</summary>
+    private void ForgetVideoAfterMissingPolls()
+    {
+        if (++_webMissingPolls < WebMissingPollTolerance)
+            return;
+
+        _webHasVideo = false;
+        _webVideoPlaying = false;
+        _webPosition = 0;
+        _webDuration = 0;
+    }
+
     /// <summary>页面当前地址(控制条上的地址栏显示它)。</summary>
     private string _webCurrentUrl = string.Empty;
 
@@ -136,6 +162,7 @@ public partial class MainWindow
         _webButtonDown = false;
         _webPosition = 0;
         _webDuration = 0;
+        _webMissingPolls = 0;
 
         // 下次进来是新页面,选集列表和网页标题都重新来。
         _webTitle = string.Empty;
@@ -367,6 +394,7 @@ public partial class MainWindow
         _webButtonDown = false;
         _webPosition = 0;
         _webDuration = 0;
+        _webMissingPolls = 0;
 
         if (e.IsSuccess)
         {
@@ -444,20 +472,30 @@ public partial class MainWindow
             string json = await core.ExecuteScriptAsync(script);
 
             // 页面里没有 <video>(比如 B 站首页)—— 这不算"暂停"。
+            // 但换P / 换源 / 广告的一瞬间也会读不到,所以"读不到"要连着几次才认账:
+            // 一读不到就清状态的话,暂停压暗会被撤销、下一轮又压回去,画面闪一下。
             if (string.IsNullOrEmpty(json) || json == "null")
             {
-                _webHasVideo = false;
-                _webVideoPlaying = false;
-                _webPosition = 0;
-                _webDuration = 0;
+                ForgetVideoAfterMissingPolls();
                 return;
             }
 
             using var doc = System.Text.Json.JsonDocument.Parse(json);
             System.Text.Json.JsonElement root = doc.RootElement;
 
-            _webDuration = root.GetProperty("d").GetDouble();
-            _webHasVideo = _webDuration > 0.01;
+            double duration = root.GetProperty("d").GetDouble();
+
+            // 时长读不出来同样是"换源中"的典型状态(v.duration 这会儿是 NaN/0),
+            // 一样按"暂时读不到"处理。
+            if (duration <= 0.01)
+            {
+                ForgetVideoAfterMissingPolls();
+                return;
+            }
+
+            _webMissingPolls = 0;
+            _webDuration = duration;
+            _webHasVideo = true;
             _webVideoPlaying = !root.GetProperty("p").GetBoolean();
             _webPosition = root.GetProperty("t").GetDouble();
 
@@ -470,9 +508,9 @@ public partial class MainWindow
         }
         catch
         {
-            // 页面正在切换、WebView 正在重建:当作"没有视频",下一轮再问。
-            _webHasVideo = false;
-            _webVideoPlaying = false;
+            // 页面正在切换、WebView 正在重建:先当"这一轮没读到",别急着把状态清掉
+            // (清了就等于撤销暂停压暗 / 撤掉"暂停时隐藏",下一轮又加回来 —— 画面会闪)。
+            ForgetVideoAfterMissingPolls();
         }
         finally
         {
