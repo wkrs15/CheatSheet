@@ -134,6 +134,11 @@
                       Content="拖动窗口边缘时保持等比例(按视频比例缩放)"
                       Click="Proportional_Click" />
 
+            <CheckBox x:Name="ResumeBox"
+                      Margin="0,8,0,0"
+                      Content="记住本地视频的播放进度(下次打开接着看)"
+                      Click="Resume_Click" />
+
             <TextBlock Text="暂停时" Style="{StaticResource SectionTitle}" Margin="0,18,0,8" />
 
             <RadioButton x:Name="PauseNothingBox" GroupName="PauseBehavior"

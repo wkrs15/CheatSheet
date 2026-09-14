@@ -1,4 +1,5 @@
 using System;
+using System.Net.Http;
 using System.Reflection;
 using System.Threading.Tasks;
 using System.Windows;
@@ -97,6 +98,9 @@ public partial class MainWindow
         {
             Player.Pause();
             _isPlaying = false;
+
+            // 本地视频停在半路:把位置记下来,下次切回来接着看。
+            SaveResumePosition(persist: true);
         }
 
         ResetPauseEffects();
@@ -285,6 +289,9 @@ public partial class MainWindow
                 try
                 {
                     _webCurrentUrl = core.Source;
+
+                    // 站内跳转(SPA)不一定触发 NavigationCompleted,分P列表要跟着地址走。
+                    UpdateBiliParts();
                     RaiseStateChanged();
                 }
                 catch
@@ -349,6 +356,9 @@ public partial class MainWindow
             // 新页面里的 <video> 还不知道我们设了倍速,重新写一次。
             WebSetSpeed(_speedRatio);
         }
+
+        // 地址变了就重新认一遍:是不是 B 站视频、是哪个 BV、第几P(下拉栏要用)。
+        UpdateBiliParts();
 
         RaiseStateChanged();
 
@@ -745,6 +755,189 @@ public partial class MainWindow
         {
             // 页面还没加载好时忽略。
         }
+    }
+
+    // ---------------- B 站分P(控制条上的「选集」下拉栏) ----------------
+
+    /// <summary>B 站分P 的一项。<c>Page</c> 就是第几P(从 1 开始,和网址里的 <c>?p=</c> 一致)。</summary>
+    internal sealed record WebPart(int Page, string Title);
+
+    /// <summary>当前 B 站视频的分P列表(不是 B 站视频、或者还没取到时为空)。</summary>
+    private readonly List<WebPart> _webParts = new();
+
+    /// <summary>分P列表每换一次就 +1 —— 控制条据此判断"下拉栏要重建了"。</summary>
+    private int _webPartsVersion;
+
+    /// <summary>已经取过哪个 BV 号的分P(切来切去时不重复请求)。</summary>
+    private string _webPartsBvid = string.Empty;
+
+    /// <summary>当前是第几P(从 1 开始;不是分P视频时恒为 1)。</summary>
+    private int _webCurrentPage = 1;
+
+    /// <summary>取过的分P列表,按 BV 号缓存 —— 一个视频的分P不会变,来回切页不必反复请求。</summary>
+    private static readonly Dictionary<string, List<WebPart>> PartsCache = new();
+
+    internal IReadOnlyList<WebPart> WebParts => _webParts;
+
+    /// <summary>网址里的 BV 号。</summary>
+    private static readonly System.Text.RegularExpressions.Regex BiliBvRegex = new(
+        @"bilibili\.com/video/(BV[0-9A-Za-z]+)",
+        System.Text.RegularExpressions.RegexOptions.Compiled
+        | System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+
+    /// <summary>网址里的 <c>p=</c> 参数(第几P)。</summary>
+    private static readonly System.Text.RegularExpressions.Regex BiliPageRegex = new(
+        @"[?&]p=(\d+)",
+        System.Text.RegularExpressions.RegexOptions.Compiled);
+
+    /// <summary>
+    /// 看当前地址是不是 B 站视频,据此刷新分P列表。
+    /// <para>
+    /// 分P 走 B 站自己的 <c>pagelist</c> 接口(公开、不用登录、不用签名),而不是去刮页面 DOM:
+    /// 播放器的面板是"鼠标移上去才渲染"的,B 站还三天两头改类名,接口稳得多 ——
+    /// 而且分P标题在页面里本来就只存在于 JS 数据里。
+    /// </para>
+    /// </summary>
+    private void UpdateBiliParts()
+    {
+        string url = _webCurrentUrl ?? string.Empty;
+
+        var bvMatch = BiliBvRegex.Match(url);
+        string bvid = bvMatch.Success ? bvMatch.Groups[1].Value : string.Empty;
+
+        int page = 1;
+        var pageMatch = BiliPageRegex.Match(url);
+
+        if (bvMatch.Success
+            && pageMatch.Success
+            && int.TryParse(pageMatch.Groups[1].Value, out int parsed)
+            && parsed > 0)
+        {
+            page = parsed;
+        }
+
+        bool pageChanged = page != _webCurrentPage;
+        _webCurrentPage = page;
+
+        // 还是同一个视频:只有"第几P"可能变了(用户在页面里切了集)。
+        if (bvid == _webPartsBvid)
+        {
+            if (pageChanged)
+                RaiseStateChanged();
+
+            return;
+        }
+
+        // 换了视频:上一个的分P立刻作废 —— 下拉栏不能还挂着别的视频的选集。
+        _webPartsBvid = bvid;
+        _webParts.Clear();
+        _webPartsVersion++;
+
+        if (bvid.Length == 0)
+        {
+            RaiseStateChanged();
+            return;
+        }
+
+        if (PartsCache.TryGetValue(bvid, out List<WebPart>? cached))
+            _webParts.AddRange(cached);
+        else
+            _ = FetchBiliPartsAsync(bvid);
+
+        RaiseStateChanged();
+    }
+
+    private static readonly HttpClient BiliHttp = CreateBiliHttpClient();
+
+    private static HttpClient CreateBiliHttpClient()
+    {
+        var client = new HttpClient { Timeout = TimeSpan.FromSeconds(8) };
+
+        try
+        {
+            // B 站接口不带 UA / Referer 会直接回 -400(风控),所以装成浏览器去问。
+            client.DefaultRequestHeaders.UserAgent.ParseAdd(
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
+                "(KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36");
+            client.DefaultRequestHeaders.Referrer = new Uri("https://www.bilibili.com/");
+        }
+        catch
+        {
+            // 请求头设不上也不该让程序起不来,大不了下拉栏里没有分P。
+        }
+
+        return client;
+    }
+
+    private async Task FetchBiliPartsAsync(string bvid)
+    {
+        try
+        {
+            string json = await BiliHttp.GetStringAsync(
+                "https://api.bilibili.com/x/player/pagelist?bvid=" + bvid + "&jsonp=jsonp");
+
+            using var doc = System.Text.Json.JsonDocument.Parse(json);
+            System.Text.Json.JsonElement root = doc.RootElement;
+
+            if (!root.TryGetProperty("code", out System.Text.Json.JsonElement code) || code.GetInt32() != 0)
+                return;
+
+            if (!root.TryGetProperty("data", out System.Text.Json.JsonElement data)
+                || data.ValueKind != System.Text.Json.JsonValueKind.Array)
+            {
+                return;
+            }
+
+            var parts = new List<WebPart>();
+
+            foreach (System.Text.Json.JsonElement item in data.EnumerateArray())
+            {
+                int page = item.TryGetProperty("page", out System.Text.Json.JsonElement p)
+                    ? p.GetInt32()
+                    : parts.Count + 1;
+
+                string title = item.TryGetProperty("part", out System.Text.Json.JsonElement t)
+                    ? t.GetString() ?? string.Empty
+                    : string.Empty;
+
+                parts.Add(new WebPart(page, title));
+            }
+
+            if (parts.Count == 0)
+                return;
+
+            PartsCache[bvid] = parts;
+
+            // 请求回来的时候用户可能已经翻到别的视频了:只认"还是当初那个 BV"。
+            if (!string.Equals(bvid, _webPartsBvid, StringComparison.OrdinalIgnoreCase))
+                return;
+
+            _webParts.Clear();
+            _webParts.AddRange(parts);
+            _webPartsVersion++;
+            RaiseStateChanged();
+        }
+        catch
+        {
+            // 断网 / 被风控:当这个视频没有分P就是了,不影响播放。
+        }
+    }
+
+    /// <summary>
+    /// 切到指定的第几P(控制条下拉栏选的)。
+    /// <para>
+    /// 走"改网址"而不是去点页面里的选集按钮:页面那套是 JS 渲染的、类名经常变,
+    /// 而 <c>?p=N</c> 是 B 站自己的标准入口 —— 反正新的一 P 本来就要重新加载。
+    /// </para>
+    /// </summary>
+    internal void WebSelectPart(int page)
+    {
+        if (_webPartsBvid.Length == 0 || page <= 0 || page == _webCurrentPage)
+            return;
+
+        _webCurrentPage = page;
+        NavigateWeb($"https://www.bilibili.com/video/{_webPartsBvid}?p={page}");
+        RaiseStateChanged();
     }
 
     /// <summary>

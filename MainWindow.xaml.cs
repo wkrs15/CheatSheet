@@ -37,6 +37,15 @@ public partial class MainWindow : Window
     /// <summary>按住多久算"长按"(超过它才算按住,否则算点按)。</summary>
     private const int HoldDelayMs = 220;
 
+    /// <summary>至少看了这么久才值得记播放进度(秒) —— 刚打开就关掉不算"看到一半"。</summary>
+    private const double ResumeMinimumSeconds = 5;
+
+    /// <summary>离片尾还剩这么久以内的记录不再续播(那基本等于看完了,重开就该从头看)。</summary>
+    private const double ResumeTailSeconds = 10;
+
+    /// <summary>播放中每隔这么久把进度落一次盘(被强杀 / 断电时最多丢这一段)。</summary>
+    private const double ResumeSaveIntervalSeconds = 60;
+
     private readonly AppSettings _settings;
     private readonly List<string> _playlist = new();
     private readonly List<HotkeyAction> _hotkeyActions;
@@ -61,6 +70,26 @@ public partial class MainWindow : Window
     private double _lastNonZeroVolume = 80;
     private string? _heldGesture;
     private bool _heldByButton;
+
+    /// <summary>当前正在播的本地文件(绝对路径)。断点续播按它存取。</summary>
+    private string? _currentMediaPath;
+
+    /// <summary>打开这个文件时要跳到的位置(秒);&lt;= 0 表示不用跳。</summary>
+    private double _resumeTarget;
+
+    /// <summary>这次的"续播跳转"是否已经做过了 —— <c>MediaOpened</c> 可能来不止一次,只跳第一次。</summary>
+    private bool _resumeApplied;
+
+    /// <summary>上一次把进度写回配置的时间。</summary>
+    private DateTime _resumeSavedAt = DateTime.MinValue;
+
+    /// <summary>正在切文件 / 关窗口,自己调了 <c>Stop()</c> —— 这期间的 <c>MediaEnded</c> 不算"播完了"。</summary>
+    private bool _stoppingSelf;
+
+    /// <summary>下拉栏(选集)的数据缓存与它的"变了没有"签名。</summary>
+    private IReadOnlyList<ChapterItem> _chapters = Array.Empty<ChapterItem>();
+    private int _chapterIndex = -1;
+    private string _chapterSignature = string.Empty;
 
     /// <summary>当前画面变暗是"暂停压暗"造成的(不是用户自己调的值)。</summary>
     private bool _pausedDimmed;
@@ -104,6 +133,9 @@ public partial class MainWindow : Window
             PollWebState();
             RefreshProgress();
             UpdatePauseBehavior();
+
+            // 本地视频看到哪儿了,按间隔记一笔(见 MaybeSaveResume)。
+            MaybeSaveResume();
         };
 
         // 全局热键只有"按下"事件(WM_HOTKEY),所以靠轮询 GetAsyncKeyState 判断是否松开。
@@ -150,6 +182,101 @@ public partial class MainWindow : Window
 
     internal IReadOnlyList<HotkeyAction> HotkeyActions => _hotkeyActions;
 
+    // ---------------- 控制条上的"选集"下拉栏 ----------------
+
+    /// <summary>
+    /// 下拉栏里的一项。<see cref="Index"/> 是"选中它之后要拿这个值干什么"的编号:
+    /// 网页模式下是 B 站的第几P(从 1 开始),本地模式下是播放列表里的下标。
+    /// </summary>
+    internal sealed record ChapterItem(int Index, string Label, bool IsCurrent);
+
+    /// <summary>
+    /// 下拉栏的内容:网页模式 = 当前 B 站视频的分P,本地模式 = 播放列表。
+    /// 同一个实例会一直复用,直到内容真的变了 —— 控制条靠它判断要不要重建列表。
+    /// </summary>
+    internal IReadOnlyList<ChapterItem> Chapters
+    {
+        get
+        {
+            EnsureChapters();
+            return _chapters;
+        }
+    }
+
+    /// <summary>下拉栏里当前那一项的下标(没有就是 -1)。</summary>
+    internal int ChapterIndex
+    {
+        get
+        {
+            EnsureChapters();
+            return _chapterIndex;
+        }
+    }
+
+    /// <summary>从下拉栏里选一项:网页模式切分P,本地模式切播放列表。</summary>
+    internal void SelectChapter(ChapterItem item)
+    {
+        ArgumentNullException.ThrowIfNull(item);
+
+        if (_webMode)
+            WebSelectPart(item.Index);
+        else
+            PlayAt(item.Index);
+    }
+
+    /// <summary>
+    /// 按需重建下拉栏的数据。
+    /// <para>
+    /// 每次状态变化控制条都会来读它,而 B 站一个视频可能有上百个分P ——
+    /// 每次都重建列表既浪费又会把下拉栏里正在滚动的用户弹回顶部,
+    /// 所以先用一个签名判断"内容真的变了没有",没变就把上次那个列表原样交回去。
+    /// </para>
+    /// </summary>
+    private void EnsureChapters()
+    {
+        string signature = _webMode
+            ? $"w|{_webPartsVersion}|{_webCurrentPage}"
+            : $"l|{_playlist.Count}|{_index}|{(_playlist.Count > 0 ? _playlist[0] : string.Empty)}";
+
+        if (signature == _chapterSignature)
+            return;
+
+        _chapterSignature = signature;
+
+        var items = new List<ChapterItem>();
+
+        if (_webMode)
+        {
+            foreach (WebPart part in WebParts)
+                items.Add(new ChapterItem(part.Page, $"P{part.Page}  {part.Title}", part.Page == _webCurrentPage));
+
+            _chapterIndex = items.FindIndex(item => item.Index == _webCurrentPage);
+        }
+        else
+        {
+            for (int i = 0; i < _playlist.Count; i++)
+                items.Add(new ChapterItem(i, $"{i + 1}. {Path.GetFileName(_playlist[i])}", i == _index));
+
+            _chapterIndex = items.Count > 0 ? _index : -1;
+        }
+
+        _chapters = items;
+    }
+
+    /// <summary>是否记住本地视频的播放进度(设置窗口里的开关)。</summary>
+    internal bool RememberPosition
+    {
+        get => _settings.RememberPosition;
+        set
+        {
+            if (_settings.RememberPosition == value)
+                return;
+
+            _settings.RememberPosition = value;
+            _settings.Save();
+        }
+    }
+
     /// <summary>拖动窗口边缘时是否按视频比例等比例缩放(设置窗口里的开关)。</summary>
     internal bool ProportionalResize
     {
@@ -186,6 +313,9 @@ public partial class MainWindow : Window
         {
             Player.Pause();
             _isPlaying = false;
+
+            // 一暂停就可能关窗口 / 关机,进度这时候就该落盘。
+            SaveResumePosition(persist: true);
         }
         else
         {
@@ -578,12 +708,18 @@ public partial class MainWindow : Window
 
         try
         {
+            // 关窗口时也要拦一下 Stop() 引起的 MediaEnded,不然刚存好的进度会被"看完"的规则清掉。
+            _stoppingSelf = true;
             Player.Stop();
             Player.Source = null;
         }
         catch
         {
             // 关闭阶段释放媒体失败无需处理。
+        }
+        finally
+        {
+            _stoppingSelf = false;
         }
     }
 
@@ -973,6 +1109,10 @@ public partial class MainWindow : Window
         _settings.SpeedRatio = GetSpeed();
         _settings.WebMode = _webMode;
 
+        // 关窗口前把"看到哪儿了"记下来,顺手清掉已经不在硬盘上的旧记录。
+        SaveResumePosition(persist: false);
+        PruneResumeEntries();
+
         SyncHotkeysToSettings();
         _settings.Save();
     }
@@ -1114,6 +1254,9 @@ public partial class MainWindow : Window
 
     private void PlayAt(int index)
     {
+        // 换集之前先把"当前这一集看到哪儿了"记下来 —— 否则看了半集切走,进度就丢了。
+        SaveResumePosition(persist: true);
+
         // 一旦播本地视频,就从网页模式切回来(两个模式不共存)。
         if (_webMode)
             ExitWebMode();
@@ -1126,10 +1269,30 @@ public partial class MainWindow : Window
 
         string path = _playlist[_index];
 
+        // 续播位置必须在 Source / Play() 之前就位 —— MediaOpened 有可能在 Play() 里就同步触发,
+        // 那时候再去设就晚了(跳转会被当成"已经做过了")。
+        _currentMediaPath = Path.GetFullPath(path);
+        _resumeTarget = _settings.RememberPosition && _settings.Resume.TryGetValue(_currentMediaPath, out double saved)
+            ? saved
+            : 0;
+        _resumeApplied = false;
+
         try
         {
-            Player.Stop();
-            Player.Source = new Uri(Path.GetFullPath(path), UriKind.Absolute);
+            // 自己调 Stop() 时媒体那边会当成"播完了"抛 MediaEnded —— 那不是真的看完,
+            // 得挡住,否则会不明不白地跳到下一集(而且刚存好的进度会被"看完"的规则清掉)。
+            _stoppingSelf = true;
+
+            try
+            {
+                Player.Stop();
+            }
+            finally
+            {
+                _stoppingSelf = false;
+            }
+
+            Player.Source = new Uri(_currentMediaPath, UriKind.Absolute);
             Player.Play();
 
             _isPlaying = true;
@@ -1137,6 +1300,8 @@ public partial class MainWindow : Window
         }
         catch (Exception ex)
         {
+            _currentMediaPath = null;
+
             Growl.Error(new GrowlInfo
             {
                 Message = $"无法打开 {Path.GetFileName(path)}: {ex.Message}",
@@ -1148,6 +1313,116 @@ public partial class MainWindow : Window
         UpdateFileName();
         UpdateHint();
         RaiseStateChanged();
+    }
+
+    // ---------------- 本地视频:断点续播 ----------------
+
+    /// <summary>
+    /// 把当前本地文件的位置记进配置。
+    /// <para>
+    /// 三种情况分开处理:<b>看到接近片尾</b> → 把记录删掉(等于看完了,下次从头开始);
+    /// <b>看到一半</b> → 记下;<b>刚打开(head)</b> → 什么都不做 ——
+    /// 这一点很重要:换集、关窗口都会走一遍这里,那时候位置是 0,要是也当成"退回到开头"
+    /// 去写记录,看到一半的进度就被自己抹掉了。
+    /// </para>
+    /// </summary>
+    private void SaveResumePosition(bool persist)
+    {
+        _resumeSavedAt = DateTime.UtcNow;
+
+        if (!_settings.RememberPosition || _webMode || _currentMediaPath is null)
+            return;
+
+        if (!Player.NaturalDuration.HasTimeSpan)
+            return;
+
+        double total = Player.NaturalDuration.TimeSpan.TotalSeconds;
+        double position = Player.Position.TotalSeconds;
+
+        if (total <= 1)
+            return;
+
+        if (position >= total - ResumeTailSeconds)
+            _settings.Resume.Remove(_currentMediaPath);
+        else if (position >= ResumeMinimumSeconds)
+            _settings.Resume[_currentMediaPath] = position;
+
+        if (persist)
+            _settings.Save();
+    }
+
+    /// <summary>把当前文件的进度记录删掉(看完了、或者文件已经不在硬盘上)。</summary>
+    private void ClearResumePosition()
+    {
+        if (_currentMediaPath is null)
+            return;
+
+        if (_settings.Resume.Remove(_currentMediaPath))
+            _settings.Save();
+    }
+
+    /// <summary>轮询里按间隔落盘,顺手把"没打开任何文件时"的杂事挡住。</summary>
+    private void MaybeSaveResume()
+    {
+        if (!_settings.RememberPosition || _webMode || _currentMediaPath is null || !_isPlaying)
+            return;
+
+        if ((DateTime.UtcNow - _resumeSavedAt).TotalSeconds < ResumeSaveIntervalSeconds)
+            return;
+
+        SaveResumePosition(persist: true);
+    }
+
+    /// <summary>清掉已经不在硬盘上的记录,顺便给字典封个顶(别让它无限长大)。</summary>
+    private void PruneResumeEntries()
+    {
+        const int MaxEntries = 300;
+
+        foreach (string path in _settings.Resume.Keys.ToList())
+        {
+            try
+            {
+                if (!File.Exists(path))
+                    _settings.Resume.Remove(path);
+            }
+            catch
+            {
+                // 路径非法(盘符被拔了等)的记录直接丢掉。
+                _settings.Resume.Remove(path);
+            }
+        }
+
+        while (_settings.Resume.Count > MaxEntries)
+            _settings.Resume.Remove(_settings.Resume.Keys.First());
+    }
+
+    /// <summary>打开文件之后跳到上次的位置。只跳一次,而且只在"真的看过一半"时跳。</summary>
+    private void ApplyResumePosition()
+    {
+        if (_resumeApplied || _resumeTarget < ResumeMinimumSeconds)
+            return;
+
+        // 时长还没读出来就先不跳、也不记"跳过了" —— MediaOpened 之后还有机会。
+        if (!Player.NaturalDuration.HasTimeSpan)
+            return;
+
+        _resumeApplied = true;
+
+        if (_resumeTarget >= Player.NaturalDuration.TimeSpan.TotalSeconds - ResumeTailSeconds)
+        {
+            ClearResumePosition();
+            return;
+        }
+
+        try
+        {
+            Player.Position = TimeSpan.FromSeconds(_resumeTarget);
+            Growl.Info($"接着上次看:{FormatTime(TimeSpan.FromSeconds(_resumeTarget))}", "resume");
+        }
+        catch
+        {
+            // 个别文件不支持定位(定位失败就从头播,不影响使用)。
+        }
     }
 
     private void Seek(double seconds)
@@ -1181,12 +1456,23 @@ public partial class MainWindow : Window
         // MediaElement 的 Volume / SpeedRatio 在媒体真正打开后设置才可靠。
         Player.Volume = _muted ? 0 : _volumePercent / 100.0;
         Player.SpeedRatio = GetSpeed();
+
+        // 断点续播:位置也得等媒体真的打开了才跳得动。
+        ApplyResumePosition();
+
         _timer.Start();
         RaiseStateChanged();
     }
 
     private void Player_MediaEnded(object sender, RoutedEventArgs e)
     {
+        // 自己调 Stop() 引起的那次不算"播完了"(切集 / 关窗口都会走到这)。
+        if (_stoppingSelf)
+            return;
+
+        // 真的播到头了:这一集的进度记录没必要留着。
+        ClearResumePosition();
+
         if (_settings.Loop)
         {
             Player.Position = TimeSpan.Zero;

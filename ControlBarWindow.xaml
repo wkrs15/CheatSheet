@@ -64,6 +64,75 @@
             <Setter Property="Background" Value="#33FFFFFF" />
         </Style>
 
+        <!-- 「选集」下拉栏的按钮:一条胶囊,显示当前是第几集 + 一个下箭头 -->
+        <Style x:Key="ChapterToggleButton" TargetType="ToggleButton">
+            <Setter Property="Height" Value="30" />
+            <Setter Property="Margin" Value="1,0" />
+            <Setter Property="FontFamily" Value="Microsoft YaHei UI" />
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="Foreground" Value="#F2FFFFFF" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Focusable" Value="False" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ToggleButton">
+                        <Border x:Name="Bd" Background="{TemplateBinding Background}" CornerRadius="6" Padding="8,0">
+                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                <TextBlock Text="{TemplateBinding Content}"
+                                           MaxWidth="168"
+                                           TextTrimming="CharacterEllipsis"
+                                           VerticalAlignment="Center" />
+                                <TextBlock Text="&#xE70D;"
+                                           FontFamily="Segoe MDL2 Assets"
+                                           FontSize="10"
+                                           Margin="6,1,0,0"
+                                           Foreground="#B3FFFFFF"
+                                           VerticalAlignment="Center" />
+                            </StackPanel>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="#33FFFFFF" />
+                            </Trigger>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="#55FFFFFF" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- 下拉栏里的每一项 -->
+        <Style x:Key="ChapterItemButton" TargetType="Button">
+            <Setter Property="FontFamily" Value="Microsoft YaHei UI" />
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="Foreground" Value="#F2FFFFFF" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Focusable" Value="False" />
+            <Setter Property="HorizontalContentAlignment" Value="Left" />
+            <!-- 行宽兜个底:否则标题长短不一会让高亮条的宽度参差不齐 -->
+            <Setter Property="MinWidth" Value="360" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bd"
+                                Background="{TemplateBinding Background}"
+                                CornerRadius="6"
+                                Padding="6,5">
+                            <ContentPresenter VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="#33FFFFFF" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
         <!-- 地址栏输入框:自己画模板,不受浅色主题影响(和 BarButton 一个道理) -->
         <Style x:Key="AddressBox" TargetType="TextBox">
             <Setter Property="Height" Value="24" />
@@ -142,6 +211,76 @@
                            Text="把视频拖到这里开始播放" />
 
                 <Border Style="{StaticResource BarSeparator}" />
+
+                <!-- 选集下拉栏:网页模式 = B 站的分P,本地模式 = 播放列表。
+                     只有一项时收起来(没得选)。 -->
+                <ToggleButton x:Name="ChapterToggle"
+                              Style="{StaticResource ChapterToggleButton}"
+                              Visibility="Collapsed"
+                              Click="ChapterToggle_Click"
+                              ToolTip="选集:网页模式列出 B 站的分P,本地模式列出播放列表" />
+
+                <Popup x:Name="ChapterPopup"
+                       PlacementTarget="{Binding ElementName=ChapterToggle}"
+                       Placement="Bottom"
+                       VerticalOffset="2"
+                       StaysOpen="False"
+                       AllowsTransparency="True"
+                       PopupAnimation="Fade"
+                       Opened="ChapterPopup_Opened"
+                       Closed="ChapterPopup_Closed">
+                    <Border Background="#F215171B"
+                            BorderBrush="#33FFFFFF"
+                            BorderThickness="1"
+                            CornerRadius="8"
+                            Padding="4"
+                            Margin="0,0,8,8">
+                        <ScrollViewer MaxHeight="340" VerticalScrollBarVisibility="Auto">
+                            <ItemsControl x:Name="ChapterList">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Button Style="{StaticResource ChapterItemButton}"
+                                                Tag="{Binding}"
+                                                ToolTip="{Binding Label}"
+                                                Click="ChapterItem_Click">
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="16" />
+                                                    <ColumnDefinition Width="*" />
+                                                </Grid.ColumnDefinitions>
+
+                                                <!-- 当前正在看的那一集打个勾 -->
+                                                <TextBlock Grid.Column="0"
+                                                           Text="&#xE73E;"
+                                                           FontFamily="Segoe MDL2 Assets"
+                                                           FontSize="11"
+                                                           Foreground="#FF2E90FF"
+                                                           VerticalAlignment="Center">
+                                                    <TextBlock.Style>
+                                                        <Style TargetType="TextBlock">
+                                                            <Setter Property="Visibility" Value="Hidden" />
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding IsCurrent}" Value="True">
+                                                                    <Setter Property="Visibility" Value="Visible" />
+                                                                </DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </TextBlock.Style>
+                                                </TextBlock>
+
+                                                <TextBlock Grid.Column="1"
+                                                           Text="{Binding Label}"
+                                                           MaxWidth="400"
+                                                           TextTrimming="CharacterEllipsis"
+                                                           VerticalAlignment="Center" />
+                                            </Grid>
+                                        </Button>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </ScrollViewer>
+                    </Border>
+                </Popup>
 
                 <Button Style="{StaticResource BarButton}" Content="&#xE8E5;" Click="Open_Click" ToolTip="打开视频文件" />
                 <Button Style="{StaticResource BarButton}" Content="&#xE892;" Click="Previous_Click" ToolTip="上一集" />

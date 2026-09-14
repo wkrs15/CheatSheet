@@ -31,6 +31,18 @@ public sealed class AppSettings
     public int SeekStepSeconds { get; set; } = 5;
     public string? LastDirectory { get; set; }
 
+    /// <summary>
+    /// 本地视频的断点续播:文件路径 → 上次看到的位置(秒)。
+    /// <para>
+    /// 键就是文件路径,所以文件被挪走 / 改名之后旧记录会失效 —— 保存时会顺手把
+    /// 已经不在硬盘上的条目清掉(见 <c>PruneResumeEntries</c>)。
+    /// </para>
+    /// </summary>
+    public Dictionary<string, double> Resume { get; set; } = new();
+
+    /// <summary>是否记住本地视频的播放进度(下次打开同一个文件自动接着看)。</summary>
+    public bool RememberPosition { get; set; } = true;
+
     /// <summary>网页模式打开时加载的首页。</summary>
     public string WebHomeUrl { get; set; } = "https://www.bilibili.com";
 
@@ -65,6 +77,7 @@ public sealed class AppSettings
                 if (loaded is not null)
                 {
                     loaded.Hotkeys ??= new Dictionary<string, string>();
+                    loaded.Resume ??= new Dictionary<string, double>();
                     return loaded;
                 }
             }

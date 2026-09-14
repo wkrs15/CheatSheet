@@ -1,5 +1,7 @@
 using System.Runtime.InteropServices;
 using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
@@ -83,6 +85,12 @@ public partial class ControlBarWindow : Window
     /// <summary>正在地址栏里打字。期间要保持条不收起,而且焦点不能交还给游戏。</summary>
     private bool _editing;
 
+    /// <summary>
+    /// 选集下拉栏正开着。和地址栏编辑一样:这期间不能把条收起来 ——
+    /// 鼠标一旦从屏幕顶端移下来(去点列表),轮询就会判成"该收起",条一藏弹层也跟着没了。
+    /// </summary>
+    private bool _menuOpen;
+
     /// <summary>开始编辑前的前台窗口(通常是游戏),打完字还给它。</summary>
     private IntPtr _focusBeforeEdit;
 
@@ -156,8 +164,9 @@ public partial class ControlBarWindow : Window
     /// <summary>鼠标在屏幕顶部一小条内、或已经停在条上 → 显示;否则收起。</summary>
     private void UpdateAutoHide()
     {
-        // 正在地址栏里打字:不管鼠标跑哪去了都别收起,不然输入框会跟着窗口一起消失。
-        if (_editing)
+        // 正在地址栏里打字 / 正开着下拉栏:不管鼠标跑哪去了都别收起,
+        // 不然输入框、弹出来的列表会跟着窗口一起消失。
+        if (_editing || _menuOpen)
         {
             SetVisible(true);
             return;
@@ -203,6 +212,10 @@ public partial class ControlBarWindow : Window
         }
         else
         {
+            // 条要收起来了,弹在外面的下拉栏不能留着(它会悬在屏幕中间不动)。
+            if (ChapterPopup.IsOpen)
+                ChapterPopup.IsOpen = false;
+
             var fade = new DoubleAnimation(1, 0, FadeOut)
             {
                 EasingFunction = new CubicEase { EasingMode = EasingMode.EaseIn }
@@ -247,11 +260,81 @@ public partial class ControlBarWindow : Window
             string url = _main.WebCurrentUrl;
             if (!_editing && !string.IsNullOrWhiteSpace(url) && AddressBox.Text != url)
                 AddressBox.Text = url;
+
+            SyncChapters();
         }
         finally
         {
             _syncing = false;
         }
+    }
+
+    /// <summary>
+    /// 把选集下拉栏刷成主窗口那边的当前内容(网页模式 = B 站分P,本地 = 播放列表)。
+    /// 只有一项时藏起来 —— 没得选的下拉栏只是占地方。
+    /// </summary>
+    private void SyncChapters()
+    {
+        IReadOnlyList<MainWindow.ChapterItem> chapters = _main.Chapters;
+
+        if (chapters.Count <= 1)
+        {
+            if (ChapterPopup.IsOpen)
+                ChapterPopup.IsOpen = false;
+
+            ChapterToggle.Visibility = Visibility.Collapsed;
+            ChapterList.ItemsSource = null;
+            return;
+        }
+
+        ChapterToggle.Visibility = Visibility.Visible;
+
+        // 列表本身是主窗口缓存着的:只在"内容真的变了"时才换一次 ItemsSource,
+        // 否则每次状态变化都重建,用户正在滚列表就会被弹回顶部。
+        if (!ReferenceEquals(ChapterList.ItemsSource, chapters))
+            ChapterList.ItemsSource = chapters;
+
+        int current = _main.ChapterIndex;
+        ChapterToggle.Content = current >= 0 && current < chapters.Count
+            ? chapters[current].Label
+            : $"{chapters.Count} 项";
+    }
+
+    // ---------------- 选集下拉栏 ----------------
+
+    private void ChapterToggle_Click(object sender, RoutedEventArgs e)
+        => ChapterPopup.IsOpen = ChapterToggle.IsChecked == true;
+
+    /// <summary>
+    /// 弹层是<b>独立的顶层窗口</b>,控制条身上那套 <c>WS_EX_NOACTIVATE</c> 不会继承过去 ——
+    /// 不补一刀的话,弹出 / 点击都会把前台从游戏那儿抢走(游戏会被踢出全屏)。
+    /// 所以这里给弹层自己也装上同样的样式。
+    /// </summary>
+    private void ChapterPopup_Opened(object sender, EventArgs e)
+    {
+        _menuOpen = true;
+
+        if (PresentationSource.FromVisual(ChapterPopup.Child) is HwndSource source)
+        {
+            IntPtr handle = source.Handle;
+            SetWindowLong(handle, GWL_EXSTYLE,
+                GetWindowLong(handle, GWL_EXSTYLE) | WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW);
+        }
+    }
+
+    private void ChapterPopup_Closed(object sender, EventArgs e)
+    {
+        _menuOpen = false;
+        ChapterToggle.IsChecked = false;
+    }
+
+    private void ChapterItem_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button { Tag: MainWindow.ChapterItem item })
+            return;
+
+        ChapterPopup.IsOpen = false;
+        _main.SelectChapter(item);
     }
 
     // ---------------- 地址栏 ----------------
