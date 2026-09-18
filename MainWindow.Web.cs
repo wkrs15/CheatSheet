@@ -885,6 +885,9 @@ public partial class MainWindow
     /// <summary>弹幕开关里的那个 checkbox(2026-09 实测:勾选状态就是弹幕的开 / 关)。</summary>
     private const string DanmakuSwitchSelector = ".bpx-player-dm-switch input";
 
+    /// <summary>弹幕开关的外层容器:状态类是 <c>bui-danmaku-switch-state-1</c>(开)/ <c>state-3</c>(关),读不到 input 时用它兜底。</summary>
+    private const string DanmakuSwitchWrapperSelector = ".bpx-player-dm-switch";
+
     /// <summary>页面里画质菜单的原始文字(带"大会员/登录即享"这类后缀)。</summary>
     private readonly List<string> _webQualities = new();
 
@@ -967,10 +970,13 @@ public partial class MainWindow
             " });" +
             " const qs = [...document.querySelectorAll('" + QualityItemSelector + "')];" +
             " const dm = document.querySelector('" + DanmakuSwitchSelector + "');" +
+            " const dmWrap = document.querySelector('" + DanmakuSwitchWrapperSelector + "');" +
             " return { t: titles, c: current," +
             "   q: qs.map(el => (el.textContent || '').replace(/\\s+/g, ' ').trim())," +
             "   qi: qs.findIndex(el => el.classList.contains('bpx-state-active'))," +
-            "   dm: dm ? !!dm.checked : null };" +
+            // 优先看 input 的勾选;读不到就退回容器的状态类(state-3 = 关),别动不动就是 null。
+            "   dm: dm ? !!dm.checked" +
+            "     : (dmWrap ? !dmWrap.className.includes('bui-danmaku-switch-state-3') : null) };" +
             "})();";
 
         try
@@ -1166,24 +1172,106 @@ public partial class MainWindow
         RaiseStateChanged();
     }
 
-    /// <summary>弹幕开 / 关:点播放器自己的弹幕开关。</summary>
+    /// <summary>
+    /// 弹幕开 / 关。
+    /// <para>
+    /// 点的是播放器弹幕开关里的 <c>input</c>(2026-09-18 实测:点它站点状态真的会翻
+    /// ——外层容器的类从 <c>bui-danmaku-switch-state-1</c> 变成 <c>state-3</c>;
+    /// 而点外层 div 反而没用)。
+    /// </para>
+    /// <para>
+    /// 点完**回读一次**再报结果:以前这里点完就乐观地改状态、也不管成没成,
+    /// 一旦点空了(选择器没命中 / 页面结构变了)用户看到的就是"按了没反应"。
+    /// 回读还顺便兜住"input 点不动"的情况 —— 换 label 再试一次。
+    /// </para>
+    /// </summary>
     internal void ToggleWebDanmaku()
     {
-        if (!_webMode || _webDanmakuOn is null)
+        if (!_webMode)
             return;
 
-        bool turningOff = _webDanmakuOn == true;
+        _ = ToggleWebDanmakuAsync();
+    }
 
-        string script = "(() => { const el = document.querySelector('" + DanmakuSwitchSelector + "');" +
-            " if (el) el.click(); })();";
+    private async Task ToggleWebDanmakuAsync()
+    {
+        bool? before = await ReadDanmakuStateAsync();
 
-        _ = ExecuteWebScriptAsync(script);
+        if (before is null)
+        {
+            Growl.Warning(new GrowlInfo
+            {
+                Message = "这个页面上没找到弹幕开关(播放器可能还没加载出来)",
+                WaitTime = 4
+            });
+            return;
+        }
 
-        _webDanmakuOn = !turningOff;
+        await ExecuteWebScriptAsync(DanmakuClickScript);
+
+        // 等站点自己把状态渲染完再回读。
+        await Task.Delay(600);
+
+        bool? after = await ReadDanmakuStateAsync();
+
+        if (after == before)
+        {
+            // input 点不动就换 label 再试(用户真实点击是打在 label 上的)。
+            await ExecuteWebScriptAsync(DanmakuLabelClickScript);
+            await Task.Delay(600);
+
+            after = await ReadDanmakuStateAsync();
+        }
+
+        if (after is null || after == before)
+        {
+            Growl.Warning(new GrowlInfo
+            {
+                Message = "弹幕开关点了没反应(网站这边改结构了),可以在小窗里直接点页面上的开关",
+                WaitTime = 5
+            });
+            return;
+        }
+
+        _webDanmakuOn = after;
         _webPartsSignature = BuildWebPartsSignature();
 
-        Growl.Info(turningOff ? "弹幕:关" : "弹幕:开", "danmaku");
+        Growl.Info(after == true ? "弹幕:开" : "弹幕:关", "danmaku");
         RaiseStateChanged();
+    }
+
+    private const string DanmakuClickScript =
+        "(() => { const el = document.querySelector('" + DanmakuSwitchSelector + "'); if (el) el.click(); })();";
+
+    private const string DanmakuLabelClickScript =
+        "(() => { const el = document.querySelector('.bui-danmaku-switch-label'); if (el) el.click(); })();";
+
+    /// <summary>回读弹幕开关的状态(null = 页面上没这个开关)。</summary>
+    private async Task<bool?> ReadDanmakuStateAsync()
+    {
+        CoreWebView2? core = WebView?.CoreWebView2;
+
+        if (core is null)
+            return null;
+
+        const string script = "(() => { const el = document.querySelector('" + DanmakuSwitchSelector + "');" +
+            " return el ? !!el.checked : null; })();";
+
+        try
+        {
+            string json = await core.ExecuteScriptAsync(script);
+
+            return json switch
+            {
+                "true" => true,
+                "false" => false,
+                _ => null
+            };
+        }
+        catch
+        {
+            return null;
+        }
     }
 
     /// <summary>页面里那个视频播完了。一次结束只处理一次(轮询 5 次/秒,不加锁会连切好几集)。</summary>
