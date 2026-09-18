@@ -411,15 +411,6 @@ public partial class MainWindow
             // 新页面里的 <video> 还不知道我们设了倍速,重新写一次。
             WebSetSpeed(_speedRatio);
         }
-        else if ((WebView?.CoreWebView2?.Source ?? string.Empty).StartsWith("file:", StringComparison.OrdinalIgnoreCase))
-        {
-            // 本地文件打不开多半是 PDF 这类:内置浏览器的查看器没渲染出来。
-            Growl.Error(new GrowlInfo
-            {
-                Message = "这个文件内置浏览器打不开(可以试试用系统默认程序打开)。",
-                WaitTime = 5
-            });
-        }
 
         // 换了文档:上一个视频的选集列表立刻作废(下拉栏不能还挂着它的分P),
         // 新页面里有没有选集、有哪些,交给下一轮读取去认。

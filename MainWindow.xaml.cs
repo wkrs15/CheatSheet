@@ -1531,11 +1531,10 @@ public partial class MainWindow : Window
                 "视频文件|*.mp4;*.m4v;*.mov;*.wmv;*.avi;*.mkv;*.webm;*.flv;*.ts;*.mpg;*.mpeg;*.3gp|" +
                 "图片|*.png;*.jpg;*.jpeg;*.gif;*.bmp;*.webp;*.tif;*.tiff|" +
                 "笔记 / 文本|*.md;*.markdown;*.txt;*.log;*.json;*.ini;*.yml;*.yaml;*.csv|" +
-                "PDF|*.pdf|" +
                 "所有支持的格式|" +
                 "*.mp4;*.m4v;*.mov;*.wmv;*.avi;*.mkv;*.webm;*.flv;*.ts;*.mpg;*.mpeg;*.3gp;" +
                 "*.png;*.jpg;*.jpeg;*.gif;*.bmp;*.webp;*.tif;*.tiff;" +
-                "*.md;*.markdown;*.txt;*.log;*.json;*.ini;*.yml;*.yaml;*.csv;*.pdf|" +
+                "*.md;*.markdown;*.txt;*.log;*.json;*.ini;*.yml;*.yaml;*.csv|" +
                 "所有文件|*.*"
         };
 
@@ -1552,7 +1551,7 @@ public partial class MainWindow : Window
     }
 
     /// <summary>
-    /// 按扩展名分流:视频 → 播放列表,PDF → 内置浏览器,图片 / 笔记 → 查看区。
+    /// 按扩展名分流:视频 → 播放列表,图片 / 笔记 → 查看区。
     /// 混着给的时候以第一个文件的类型为准(和拖文件夹时"按类型各走各的"相比,
     /// 这样用户心里更好预测)。
     /// </summary>
@@ -1568,18 +1567,9 @@ public partial class MainWindow : Window
         string first = existing[0];
 
         if (IsVideoFile(first))
-        {
             StartPlaylist(existing.Where(IsVideoFile).ToList(), 0);
-            return;
-        }
-
-        if (IsPdfFile(first))
-        {
-            OpenPdf(first);
-            return;
-        }
-
-        OpenViewer(existing, 0);
+        else
+            OpenViewer(existing, 0);
     }
 
     private void StartPlaylist(IReadOnlyList<string> files, int startIndex)
@@ -2159,7 +2149,7 @@ public partial class MainWindow : Window
         {
             Growl.Warning(new GrowlInfo
             {
-                Message = "这些文件看不了 —— 支持视频、图片、笔记(md/txt)和 PDF。",
+                Message = "这些文件看不了 —— 支持视频、图片和笔记(md/txt 等文本)。",
                 WaitTime = 3
             });
             return;

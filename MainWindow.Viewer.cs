@@ -14,9 +14,8 @@ namespace CheatSheet;
 /// <summary>
 /// 图片 / Markdown / 文本的查看 —— 「置顶小抄」的那一半。
 /// <para>
-/// 攻略其实是图文比视频多:截图、笔记、PDF 都直接拖进小窗看,比"开个浏览器再找文件"顺手。
-/// PDF 不在这里处理:它交给内置浏览器(Edge 自带查看器,能滚动、能缩放、能搜索),
-/// 见 <see cref="MainWindow.OpenPdf"/>。
+/// 攻略其实是图文比视频多:截图、笔记直接拖进小窗看,比"开个浏览器再找文件"顺手。
+/// (PDF 曾经也走这里 —— 交给了内置浏览器,后来按需求整个去掉了。)
 /// </para>
 /// </summary>
 public partial class MainWindow
@@ -51,12 +50,9 @@ public partial class MainWindow
     internal static bool IsTextFile(string path)
         => TextExtensions.Contains(Path.GetExtension(path), StringComparer.OrdinalIgnoreCase);
 
-    internal static bool IsPdfFile(string path)
-        => string.Equals(Path.GetExtension(path), ".pdf", StringComparison.OrdinalIgnoreCase);
-
-    /// <summary>这个文件小窗能不能看(视频 / 图片 / 文本 / PDF)。拖放时的分流也用它。</summary>
+    /// <summary>这个文件小窗能不能看(视频 / 图片 / 文本)。拖放与"打开"对话框的分流也用它。</summary>
     internal static bool IsSupportedFile(string path)
-        => IsVideoFile(path) || IsImageFile(path) || IsTextFile(path) || IsPdfFile(path);
+        => IsVideoFile(path) || IsImageFile(path) || IsTextFile(path);
 
     /// <summary>
     /// 打开一批图片 / 文本。混选时只留和第一个文件同类的那批(图片和笔记分开看更顺)。
@@ -86,21 +82,6 @@ public partial class MainWindow
         _viewerKind = wantImage ? ViewerKind.Image : ViewerKind.Text;
 
         ShowViewerAt(startIndex);
-    }
-
-    /// <summary>
-    /// 用内置浏览器打开本地 PDF。
-    /// <para>
-    /// Edge 自带 PDF 查看器(滚动、缩放、搜索都有),比自己渲染省事得多 ——
-    /// 之前考虑过 <c>Windows.Data.Pdf</c>,但它只给"位图"、翻页缩放全得自己写。
-    /// </para>
-    /// </summary>
-    internal void OpenPdf(string path)
-    {
-        if (!File.Exists(path))
-            return;
-
-        EnterWebMode(new Uri(path).AbsoluteUri);
     }
 
     /// <summary>切到查看列表里的第几个(支持环绕,和播放列表一个手感)。</summary>
