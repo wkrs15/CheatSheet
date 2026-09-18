@@ -5,10 +5,10 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         mc:Ignorable="d"
-        d:DesignHeight="560" d:DesignWidth="600"
+        d:DesignHeight="620" d:DesignWidth="620"
         Title="设置 · CheatSheet"
-        Width="600" Height="560"
-        MinWidth="540" MinHeight="440"
+        Width="620" Height="620"
+        MinWidth="560" MinHeight="460"
         WindowStartupLocation="CenterScreen"
         ShowInTaskbar="False"
         FontFamily="Microsoft YaHei UI"
@@ -19,14 +19,28 @@
         UseLayoutRounding="True"
         PreviewKeyDown="Window_PreviewKeyDown">
     <Window.Resources>
+        <!-- 分区标题 -->
         <Style x:Key="SectionTitle" TargetType="TextBlock">
             <Setter Property="FontSize" Value="13" />
             <Setter Property="FontWeight" Value="SemiBold" />
             <Setter Property="Margin" Value="0,0,0,10" />
         </Style>
 
+        <!-- 一行里的说明文字(左列) -->
         <Style x:Key="SettingCaption" TargetType="TextBlock">
             <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="Foreground" Value="{DynamicResource SecondaryTextBrush}" />
+        </Style>
+
+        <!-- 行标签:固定 96px,让几行控件左边缘对齐。
+             以前每个 Grid 里手写一遍 Width="96",加一行就得记得再抄一次。 -->
+        <Style x:Key="RowLabel" TargetType="TextBlock" BasedOn="{StaticResource SettingCaption}">
+            <Setter Property="Width" Value="96" />
+        </Style>
+
+        <!-- 灰色小字说明 -->
+        <Style x:Key="Hint" TargetType="TextBlock">
+            <Setter Property="TextWrapping" Value="Wrap" />
             <Setter Property="Foreground" Value="{DynamicResource SecondaryTextBrush}" />
         </Style>
 
@@ -37,6 +51,15 @@
             <Setter Property="Background" Value="#22808080" />
         </Style>
 
+        <!-- 单选 / 勾选项:统一下间距,免得每个都要手写 Margin -->
+        <Style x:Key="OptionRadio" TargetType="RadioButton">
+            <Setter Property="Margin" Value="0,0,0,8" />
+        </Style>
+
+        <Style x:Key="OptionCheck" TargetType="CheckBox">
+            <Setter Property="Margin" Value="0,0,0,8" />
+        </Style>
+
         <Style x:Key="HotkeyButton" TargetType="Button">
             <Setter Property="FontFamily" Value="Consolas" />
             <Setter Property="MinWidth" Value="140" />
@@ -45,19 +68,59 @@
             <Setter Property="Focusable" Value="False" />
         </Style>
 
+        <!-- 快捷键的一行:悬停给一点点底色,一眼看清鼠标在哪一行 -->
+        <Style x:Key="HotkeyRow" TargetType="Border">
+            <Setter Property="CornerRadius" Value="6" />
+            <Setter Property="Padding" Value="6,2" />
+            <Setter Property="Margin" Value="0,1" />
+            <Setter Property="Background" Value="Transparent" />
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Background" Value="#15808080" />
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
         <!-- 每个标签页的公共留白 -->
         <Style x:Key="PagePanel" TargetType="StackPanel">
-            <Setter Property="Margin" Value="4,12,10,10" />
+            <Setter Property="Margin" Value="4,14,10,10" />
         </Style>
     </Window.Resources>
 
-    <Grid Margin="16,10,16,14">
+    <Grid Margin="18,12,18,14">
         <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
-        <TabControl Grid.Row="0" Background="Transparent" BorderThickness="0">
+        <!-- ============ 头部:软件名 + 版本 + 一句话定位 ============ -->
+        <Grid Grid.Row="0" Margin="4,0,4,10">
+            <StackPanel Orientation="Horizontal">
+                <TextBlock Text="CheatSheet"
+                           FontSize="16"
+                           FontWeight="SemiBold"
+                           VerticalAlignment="Center" />
+                <Border Margin="8,1,0,0"
+                        Padding="6,1"
+                        CornerRadius="4"
+                        Background="#1F2E90FF"
+                        VerticalAlignment="Center">
+                    <TextBlock x:Name="VersionText"
+                               Text="v0.0.0"
+                               FontFamily="Consolas"
+                               FontSize="11"
+                               Foreground="#FF6CB6FF" />
+                </Border>
+            </StackPanel>
+
+            <TextBlock HorizontalAlignment="Right"
+                       VerticalAlignment="Center"
+                       Style="{StaticResource Hint}"
+                       Text="边玩游戏边看攻略的置顶小窗" />
+        </Grid>
+
+        <TabControl Grid.Row="1" Background="Transparent" BorderThickness="0">
 
             <!-- ============ 播放 ============ -->
             <TabItem Header="播放">
@@ -66,19 +129,23 @@
 
                         <TextBlock Text="播放模式" Style="{StaticResource SectionTitle}" />
                         <RadioButton x:Name="VideoModeBox" GroupName="PlayMode"
+                                     Style="{StaticResource OptionRadio}"
                                      Content="本地视频模式(播放视频文件)"
-                                     Margin="0,0,0,6"
                                      Checked="PlayMode_Changed" />
                         <RadioButton x:Name="WebModeBox" GroupName="PlayMode"
+                                     Style="{StaticResource OptionRadio}"
                                      Content="浏览器模式(播放网页视频,如 B 站)"
                                      Checked="PlayMode_Changed" />
+                        <TextBlock Style="{StaticResource Hint}"
+                                   Margin="0,2,0,0"
+                                   Text="切到浏览器模式会重新加载页面,当前播放位置不保留;切回本地视频模式会把内置浏览器整个关掉(把内存还给系统)。" />
 
-                        <Grid Margin="0,12,0,0">
+                        <Grid Margin="0,14,0,0">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="96" />
                                 <ColumnDefinition Width="*" />
                             </Grid.ColumnDefinitions>
-                            <TextBlock Text="浏览器首页" Style="{StaticResource SettingCaption}" />
+                            <TextBlock Text="浏览器首页" Style="{StaticResource RowLabel}" />
                             <hc:TextBox x:Name="HomeUrlBox"
                                         Grid.Column="1"
                                         Height="26"
@@ -91,27 +158,33 @@
 
                         <TextBlock Text="暂停时" Style="{StaticResource SectionTitle}" />
                         <RadioButton x:Name="PauseNothingBox" GroupName="PauseBehavior"
+                                     Style="{StaticResource OptionRadio}"
                                      Content="什么都不做"
-                                     Margin="0,0,0,6"
                                      Checked="PauseBehavior_Changed" />
                         <RadioButton x:Name="PauseHideBox" GroupName="PauseBehavior"
+                                     Style="{StaticResource OptionRadio}"
                                      Content="隐藏视频窗口"
-                                     Margin="0,0,0,6"
                                      Checked="PauseBehavior_Changed" />
                         <RadioButton x:Name="PauseDimBox" GroupName="PauseBehavior"
                                      Content="把画面调暗到 30%(推荐)"
                                      Checked="PauseBehavior_Changed" />
+                        <TextBlock Style="{StaticResource Hint}"
+                                   Margin="0,2,0,0"
+                                   Text="本地视频和网页视频都适用 —— 暂停时画面(或窗口)会自己让开,不影响下面的游戏。" />
 
                         <Border Style="{StaticResource SectionRule}" />
 
                         <TextBlock Text="播放行为" Style="{StaticResource SectionTitle}" />
                         <CheckBox x:Name="ResumeBox"
+                                  Style="{StaticResource OptionCheck}"
                                   Content="记住本地视频的播放进度(下次打开接着看)"
                                   Click="Resume_Click" />
                         <CheckBox x:Name="LoopBox"
-                                  Margin="0,10,0,0"
                                   Content="循环播放:播完最后一集回到第一集"
                                   Click="Loop_Click" />
+                        <TextBlock Style="{StaticResource Hint}"
+                                   Margin="0,2,0,0"
+                                   Text="播放列表还会自动续播下一集;网页模式的 B 站多P 视频同样会自动接下一P。" />
 
                     </StackPanel>
                 </ScrollViewer>
@@ -128,9 +201,9 @@
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="96" />
                                 <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="48" />
+                                <ColumnDefinition Width="52" />
                             </Grid.ColumnDefinitions>
-                            <TextBlock Text="透明度" Style="{StaticResource SettingCaption}" />
+                            <TextBlock Text="透明度" Style="{StaticResource RowLabel}" />
                             <Slider x:Name="OpacitySlider" Grid.Column="1"
                                     Minimum="30" Maximum="100" Value="100"
                                     VerticalAlignment="Center"
@@ -143,7 +216,7 @@
                         </Grid>
 
                         <CheckBox x:Name="ProportionalBox"
-                                  Margin="0,12,0,0"
+                                  Margin="0,14,0,0"
                                   Content="拖动窗口边缘时保持等比例(按视频比例缩放)"
                                   Click="Proportional_Click" />
 
@@ -155,9 +228,9 @@
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="96" />
                                 <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="48" />
+                                <ColumnDefinition Width="52" />
                             </Grid.ColumnDefinitions>
-                            <TextBlock Text="音量" Style="{StaticResource SettingCaption}" />
+                            <TextBlock Text="音量" Style="{StaticResource RowLabel}" />
                             <Slider x:Name="VolumeSlider" Grid.Column="1"
                                     Minimum="0" Maximum="100" Value="80"
                                     VerticalAlignment="Center"
@@ -168,12 +241,12 @@
                                        Style="{StaticResource SettingCaption}" />
                         </Grid>
 
-                        <Grid Margin="0,12,0,0">
+                        <Grid Margin="0,14,0,0">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="96" />
                                 <ColumnDefinition Width="*" />
                             </Grid.ColumnDefinitions>
-                            <TextBlock Text="播放倍速" Style="{StaticResource SettingCaption}" />
+                            <TextBlock Text="播放倍速" Style="{StaticResource RowLabel}" />
                             <hc:ComboBox x:Name="SpeedBox" Grid.Column="1"
                                          Width="120" Height="26"
                                          HorizontalAlignment="Left"
@@ -188,10 +261,9 @@
                             </hc:ComboBox>
                         </Grid>
 
-                        <TextBlock Margin="0,16,0,0"
-                                   TextWrapping="Wrap"
-                                   Foreground="{DynamicResource SecondaryTextBrush}"
-                                   Text="透明度和音量也能直接用快捷键调,不必开这个窗口。" />
+                        <TextBlock Style="{StaticResource Hint}"
+                                   Margin="0,16,0,0"
+                                   Text="透明度和音量也能直接用快捷键调(Ctrl+Alt+Z / X 与滚轮),不必开这个窗口。" />
 
                     </StackPanel>
                 </ScrollViewer>
@@ -199,18 +271,17 @@
 
             <!-- ============ 快捷键 ============ -->
             <TabItem Header="快捷键">
-                <DockPanel Margin="4,12,10,10" LastChildFill="True">
+                <DockPanel Margin="4,14,10,10" LastChildFill="True">
 
                     <StackPanel DockPanel.Dock="Top">
                         <TextBlock Text="全局热键" Style="{StaticResource SectionTitle}" />
-                        <TextBlock TextWrapping="Wrap"
-                                   Margin="0,0,0,8"
-                                   Foreground="{DynamicResource SecondaryTextBrush}"
+                        <TextBlock Style="{StaticResource Hint}"
+                                   Margin="0,0,0,10"
                                    Text="点右侧按键后按下新的组合键即完成改键(Esc 取消)。不带 Ctrl/Alt 的单键也行,但会抢占全局输入,建议用 F1-F12 这类功能键 —— 全局热键在游戏全屏、播放窗口失焦时同样生效。" />
                         <DockPanel LastChildFill="False" Margin="0,0,0,8">
                             <TextBlock DockPanel.Dock="Left"
                                        VerticalAlignment="Center"
-                                       Foreground="{DynamicResource SecondaryTextBrush}"
+                                       Style="{StaticResource Hint}"
                                        Text="改完即时生效,自动保存。" />
                             <Button DockPanel.Dock="Right"
                                     Content="恢复默认"
@@ -224,76 +295,75 @@
                         <ItemsControl x:Name="HotkeyList">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate>
-                                    <Grid Margin="0,2">
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="*" />
-                                            <ColumnDefinition Width="Auto" />
-                                            <ColumnDefinition Width="Auto" />
-                                        </Grid.ColumnDefinitions>
-                                        <TextBlock Text="{Binding Name}" VerticalAlignment="Center" />
-                                        <Button Grid.Column="1"
-                                                Style="{StaticResource HotkeyButton}"
-                                                Content="{Binding GestureDisplay}"
-                                                Click="HotkeyCapture_Click"
-                                                Tag="{Binding}" />
-                                        <TextBlock Grid.Column="2"
-                                                   Width="112"
-                                                   Margin="6,0,0,0"
-                                                   VerticalAlignment="Center"
-                                                   Text="{Binding Status}"
-                                                   TextTrimming="CharacterEllipsis"
-                                                   Foreground="{DynamicResource SecondaryTextBrush}" />
-                                    </Grid>
+                                    <Border Style="{StaticResource HotkeyRow}">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="Auto" />
+                                                <ColumnDefinition Width="132" />
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Text="{Binding Name}" VerticalAlignment="Center" />
+                                            <Button Grid.Column="1"
+                                                    Style="{StaticResource HotkeyButton}"
+                                                    Content="{Binding GestureDisplay}"
+                                                    Click="HotkeyCapture_Click"
+                                                    Tag="{Binding}" />
+                                            <TextBlock Grid.Column="2"
+                                                       Margin="8,0,0,0"
+                                                       VerticalAlignment="Center"
+                                                       Text="{Binding Status}"
+                                                       TextTrimming="CharacterEllipsis"
+                                                       ToolTip="{Binding Status}">
+                                                <TextBlock.Style>
+                                                    <Style TargetType="TextBlock">
+                                                        <!-- 颜色写在 Style 里而不是元素上:局部设的值优先级比触发器高,
+                                                             写在元素上的话下面的 DataTrigger 就永远盖不住它了。 -->
+                                                        <Setter Property="Foreground" Value="{DynamicResource SecondaryTextBrush}" />
+                                                        <Style.Triggers>
+                                                            <!-- 撞键 / 被占用 / 无效:标成醒目色,不然一眼扫过去分不出来 -->
+                                                            <DataTrigger Binding="{Binding StatusIsProblem}" Value="True">
+                                                                <Setter Property="Foreground" Value="#FFE0863A" />
+                                                                <Setter Property="FontWeight" Value="SemiBold" />
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </TextBlock.Style>
+                                            </TextBlock>
+                                        </Grid>
+                                    </Border>
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>
                     </ScrollViewer>
                 </DockPanel>
             </TabItem>
+
             <!-- ============ 关于 ============ -->
             <TabItem Header="关于">
                 <ScrollViewer VerticalScrollBarVisibility="Auto">
                     <StackPanel Style="{StaticResource PagePanel}">
 
-                        <TextBlock Text="版本" Style="{StaticResource SectionTitle}" />
+                        <TextBlock Text="更新" Style="{StaticResource SectionTitle}" />
 
                         <Grid>
                             <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="96" />
                                 <ColumnDefinition Width="*" />
                                 <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
-                            <TextBlock x:Name="VersionText"
-                                       Text="v0.0.0"
-                                       Style="{StaticResource SettingCaption}" />
                             <TextBlock x:Name="UpdateStatusText"
-                                       Grid.Column="1"
                                        Margin="0,0,10,0"
                                        VerticalAlignment="Center"
                                        TextTrimming="CharacterEllipsis"
+                                       ToolTip="{Binding Text, RelativeSource={RelativeSource Self}}"
                                        Foreground="{DynamicResource SecondaryTextBrush}"
                                        Text="还没检查过更新" />
                             <Button x:Name="CheckUpdateButton"
-                                    Grid.Column="2"
+                                    Grid.Column="1"
                                     Content="检查更新"
                                     Height="26"
                                     Padding="12,0"
                                     Click="CheckUpdate_Click" />
                         </Grid>
-
-                        <CheckBox x:Name="AutoUpdateBox"
-                                  Margin="0,12,0,0"
-                                  Content="启动时自动检查更新(一天最多一次)"
-                                  Click="AutoUpdate_Click" />
-
-                        <TextBlock Margin="0,14,0,0"
-                                   TextWrapping="Wrap"
-                                   Foreground="{DynamicResource SecondaryTextBrush}"
-                                   Text="程序是绿色版,更新方式就是下载新的 zip 解压替换 —— 所以这里只负责告诉你有没有新版。" />
-
-                        <Border Style="{StaticResource SectionRule}" />
-
-                        <TextBlock Text="其他" Style="{StaticResource SectionTitle}" />
 
                         <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
                             <Button x:Name="InstallUpdateButton"
@@ -310,35 +380,48 @@
                                     Margin="8,0,0,0"
                                     IsEnabled="False"
                                     Click="OpenDownloadPage_Click" />
+                        </StackPanel>
+
+                        <CheckBox x:Name="AutoUpdateBox"
+                                  Margin="0,12,0,0"
+                                  Content="启动时自动检查更新(一天最多一次)"
+                                  Click="AutoUpdate_Click" />
+
+                        <TextBlock Style="{StaticResource Hint}"
+                                   Margin="0,12,0,0"
+                                   Text="程序是绿色版,更新方式就是下载新的 zip 解压替换:自动更新会先把新版本解压到临时目录,等你关掉程序后再替换并重新打开(程序不能覆盖运行中的自己)。失败也没关系 —— 原程序不动,「打开下载页」随时可用。" />
+
+                        <Border Style="{StaticResource SectionRule}" />
+
+                        <TextBlock Text="文件与日志" Style="{StaticResource SectionTitle}" />
+
+                        <StackPanel Orientation="Horizontal">
                             <Button Content="打开配置目录"
                                     Height="26"
                                     Padding="12,0"
-                                    Margin="8,0,0,0"
                                     Click="OpenConfigFolder_Click" />
                         </StackPanel>
 
-                        <TextBlock Margin="0,10,0,0"
-                                   TextWrapping="Wrap"
-                                   Foreground="{DynamicResource SecondaryTextBrush}"
-                                   Text="自动更新会把新版本解压到临时目录,等你关掉程序后再替换(程序不能覆盖运行中的自己),然后自动重新打开 —— 始终以直接下载 zip 替换为准,失败时设置里的下载页永远可用。" />
+                        <TextBlock Style="{StaticResource Hint}"
+                                   Margin="0,10,0,0"
+                                   Text="设置文件 settings.json、崩溃日志 crash-*.log 都在 %AppData%\CheatSheet 里。" />
 
-                        <TextBlock Margin="0,12,0,0"
-                                   TextWrapping="Wrap"
-                                   Foreground="{DynamicResource SecondaryTextBrush}"
-                                   Text="设置文件 settings.json 和崩溃日志 crash-*.log 都在 %AppData%\CheatSheet 里。" />
+                        <Border Style="{StaticResource SectionRule}" />
 
-                        <TextBlock Margin="0,14,0,0"
-                                   TextWrapping="Wrap"
-                                   Foreground="{DynamicResource SecondaryTextBrush}"
-                                   Text="CheatSheet —— 边玩游戏边看攻略的置顶小窗播放器。" />
+                        <TextBlock Style="{StaticResource Hint}"
+                                   Text="CheatSheet —— 边玩游戏边看攻略的置顶小窗播放器。视频、网页、图片、笔记都能丢进来。" />
 
                     </StackPanel>
                 </ScrollViewer>
             </TabItem>
         </TabControl>
 
-        <DockPanel Grid.Row="1" Margin="0,12,0,0" LastChildFill="False">
-            <Button DockPanel.Dock="Right" Content="关闭" Width="96" Click="Close_Click" />
+        <DockPanel Grid.Row="2" Margin="4,12,4,0" LastChildFill="False">
+            <TextBlock DockPanel.Dock="Left"
+                       VerticalAlignment="Center"
+                       Style="{StaticResource Hint}"
+                       Text="改动即时生效并自动保存。" />
+            <Button DockPanel.Dock="Right" Content="关闭" Width="96" Height="28" Click="Close_Click" />
         </DockPanel>
     </Grid>
 </Window>

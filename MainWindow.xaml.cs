@@ -1284,14 +1284,14 @@ public partial class MainWindow : Window
 
         foreach (HotkeyAction action in _hotkeyActions)
         {
-            action.Status = string.Empty;
+            action.SetStatus(string.Empty);
 
             if (string.IsNullOrWhiteSpace(action.Gesture))
                 continue;
 
             if (claimed.TryGetValue(action.Gesture, out string? owner))
             {
-                action.Status = $"与「{owner}」重复";
+                action.SetStatus($"与「{owner}」重复", problem: true);
                 continue;
             }
 
@@ -1300,11 +1300,11 @@ public partial class MainWindow : Window
             try
             {
                 if (!_hotkeys.Register(action.Gesture, action.Callback))
-                    action.Status = "被其他程序占用";
+                    action.SetStatus("被其他程序占用", problem: true);
             }
             catch (ArgumentException)
             {
-                action.Status = "快捷键无效";
+                action.SetStatus("快捷键无效", problem: true);
             }
         }
 

@@ -14,6 +14,7 @@ public sealed class HotkeyAction : INotifyPropertyChanged
 {
     private string _gesture;
     private string _status = string.Empty;
+    private bool _statusIsProblem;
 
     public HotkeyAction(string key, string name, string defaultGesture, Action callback)
     {
@@ -65,6 +66,27 @@ public sealed class HotkeyAction : INotifyPropertyChanged
             _status = value;
             OnPropertyChanged();
         }
+    }
+
+    /// <summary>这条状态是不是"有问题"(重复 / 被占用 / 无效):界面用它把文字标成醒目色。</summary>
+    public bool StatusIsProblem
+    {
+        get => _statusIsProblem;
+        private set
+        {
+            if (_statusIsProblem == value)
+                return;
+
+            _statusIsProblem = value;
+            OnPropertyChanged();
+        }
+    }
+
+    /// <summary>设置状态文字。<paramref name="problem"/> = 这条热键当前有问题(注册失败 / 撞键)。</summary>
+    public void SetStatus(string status, bool problem = false)
+    {
+        Status = status;
+        StatusIsProblem = problem;
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;
