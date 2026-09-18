@@ -64,6 +64,10 @@
             <Setter Property="Background" Value="#33FFFFFF" />
         </Style>
 
+        <!-- 弹幕按钮的两种状态色:亮 = 开,暗 = 关(一眼能看出当前状态,不用点开下拉栏) -->
+        <SolidColorBrush x:Key="BarIconOn" Color="#F2FFFFFF" />
+        <SolidColorBrush x:Key="BarIconOff" Color="#59FFFFFF" />
+
         <!-- 「选集」下拉栏的按钮:一条胶囊,显示当前是第几集 + 一个下箭头 -->
         <Style x:Key="ChapterToggleButton" TargetType="ToggleButton">
             <Setter Property="Height" Value="30" />
@@ -218,7 +222,7 @@
                               Style="{StaticResource ChapterToggleButton}"
                               Visibility="Collapsed"
                               Click="PlayerToggle_Click"
-                              ToolTip="播放器设置:画质 / 弹幕(网页模式)" />
+                              ToolTip="清晰度(网页模式):点一下列出来切换" />
 
                 <Popup x:Name="PlayerPopup"
                        PlacementTarget="{Binding ElementName=PlayerToggle}"
@@ -282,25 +286,18 @@
                                 </ItemsControl.ItemTemplate>
                             </ItemsControl>
 
-                            <Border Height="1" Margin="6,6,6,6" Background="#26FFFFFF" />
-
-                            <Button Style="{StaticResource ChapterItemButton}"
-                                    Click="Danmaku_Click">
-                                <Grid Width="180">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="*" />
-                                        <ColumnDefinition Width="Auto" />
-                                    </Grid.ColumnDefinitions>
-                                    <TextBlock Grid.Column="0" Text="弹幕" VerticalAlignment="Center" />
-                                    <TextBlock x:Name="DanmakuStateText"
-                                               Grid.Column="1"
-                                               VerticalAlignment="Center"
-                                               Foreground="#B3FFFFFF" />
-                                </Grid>
-                            </Button>
                         </StackPanel>
                     </Border>
                 </Popup>
+
+                <!-- 弹幕开关的独立按钮:网页模式且页面上确实有这个开关时才出现。
+                     亮 = 开、暗 = 关 —— 以前它藏在「播放器」下拉栏里,切弹幕得先点开下拉栏 -->
+                <Button x:Name="DanmakuButton"
+                        Style="{StaticResource BarButton}"
+                        Content="&#xE8F2;"
+                        Visibility="Collapsed"
+                        Click="Danmaku_Click"
+                        ToolTip="弹幕" />
 
                 <ToggleButton x:Name="RecentToggle"
                               Style="{StaticResource ChapterToggleButton}"

@@ -326,6 +326,7 @@ public partial class ControlBarWindow : Window
             SyncChapters();
             SyncRecent();
             SyncPlayerOptions();
+            SyncDanmaku();
         }
         finally
         {
@@ -361,8 +362,9 @@ public partial class ControlBarWindow : Window
     }
 
     /// <summary>
-    /// 「播放器」下拉栏:网页模式下把播放器自己的画质 / 弹幕暴露出来。
+    /// 「播放器」下拉栏(只有清晰度):网页模式下把播放器自己的画质菜单搬出来。
     /// 没读到画质菜单(本地模式、或者播放器还没渲染出来)就整条收起来。
+    /// 弹幕是独立的按钮,见 <see cref="SyncDanmaku"/>。
     /// </summary>
     private void SyncPlayerOptions()
     {
@@ -385,16 +387,29 @@ public partial class ControlBarWindow : Window
 
         string quality = _main.WebQualityLabel;
         PlayerToggle.Content = quality.Length > 0 ? quality : "播放器";
-
-        DanmakuStateText.Text = _main.WebDanmakuOn switch
-        {
-            true => "开",
-            false => "关",
-            _ => "–"
-        };
     }
 
-    // ---------------- 播放器下拉栏(画质 / 弹幕) ----------------
+    /// <summary>
+    /// 弹幕开关的独立按钮:只在"网页模式 + 页面上确实有弹幕开关"时出现
+    /// (本地模式、B 站首页、播放器还没渲染出来都藏着,免得挂一个按不动的按钮)。
+    /// 亮 = 开、暗 = 关,不点开任何下拉栏就能看出当前状态。
+    /// </summary>
+    private void SyncDanmaku()
+    {
+        bool? on = _main.WebDanmakuOn;
+
+        if (!_main.IsWebMode || on is null)
+        {
+            DanmakuButton.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        DanmakuButton.Visibility = Visibility.Visible;
+        DanmakuButton.Foreground = (Brush)FindResource(on == true ? "BarIconOn" : "BarIconOff");
+        DanmakuButton.ToolTip = on == true ? "弹幕:开(点一下关掉)" : "弹幕:关(点一下打开)";
+    }
+
+    // ---------------- 播放器下拉栏(清晰度)+ 弹幕按钮 ----------------
 
     private void PlayerToggle_Click(object sender, RoutedEventArgs e)
         => PlayerPopup.IsOpen = PlayerToggle.IsChecked == true;
