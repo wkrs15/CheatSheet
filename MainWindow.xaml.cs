@@ -91,6 +91,13 @@ public partial class MainWindow : Window
     private int _chapterIndex = -1;
     private string _chapterSignature = string.Empty;
 
+    /// <summary>「最近观看」的数据缓存与签名。</summary>
+    private IReadOnlyList<RecentItem> _recentItems = Array.Empty<RecentItem>();
+    private string _recentSignature = string.Empty;
+
+    /// <summary>「最近观看」最多记多少条。</summary>
+    private const int MaxRecentFiles = 15;
+
     /// <summary>当前画面变暗是"暂停压暗"造成的(不是用户自己调的值)。</summary>
     private bool _pausedDimmed;
 
@@ -100,6 +107,9 @@ public partial class MainWindow : Window
     /// <summary>窗口是不是被 Ctrl+Alt+T 藏起来的。用它判断而不是 WindowState ——
     /// 隐藏走的是 SW_HIDE,窗口状态不再是最小化。</summary>
     private bool _hiddenByHotkey;
+
+    /// <summary>鼠标穿透开着(窗口带 WS_EX_TRANSPARENT,点击直接落到游戏上)。</summary>
+    private bool _clickThrough;
     private double _speedBeforeHold = 1.0;
     private DateTime _seekHoldStart;
     private bool _seekHoldIsLongPress;
@@ -110,7 +120,7 @@ public partial class MainWindow : Window
 
         _settings = AppSettings.Load();
 
-        // 保留的全局热键:播放、快退、快进、显示/隐藏窗口、透明度 ±。
+        // 保留的全局热键:播放、快退、快进、显示/隐藏窗口、透明度 ±、上/下一集、倍速、音量、鼠标穿透。
         // 快退/快进走 BeginSeekHold —— 点一下跳 5 秒,按住则是 2 倍速播放。
         // 全部都包在 RunHotkey 里 —— 它会保证动作执行完把前台还给游戏。
         _hotkeyActions = new List<HotkeyAction>
@@ -118,7 +128,13 @@ public partial class MainWindow : Window
             new("PlayPause", "播放 / 暂停", "Ctrl+Alt+Space", () => RunHotkey(TogglePlayPause)),
             new("SeekBack", "快退(按住 2 倍速)", "Ctrl+Alt+Left", () => RunHotkey(() => BeginSeekHold("SeekBack", -1))),
             new("SeekForward", "快进(按住 2 倍速)", "Ctrl+Alt+Right", () => RunHotkey(() => BeginSeekHold("SeekForward", 1))),
+            new("PrevEpisode", "上一集 / 上一条", "Ctrl+Alt+Up", () => RunHotkey(PlayPrevious)),
+            new("NextEpisode", "下一集 / 下一条", "Ctrl+Alt+Down", () => RunHotkey(PlayNext)),
+            new("SpeedNext", "倍速切换", "Ctrl+Alt+S", () => RunHotkey(CycleSpeed)),
+            new("VolumeDown", "音量 -", "Ctrl+Alt+C", () => RunHotkey(() => ChangeVolume(-5))),
+            new("VolumeUp", "音量 +", "Ctrl+Alt+V", () => RunHotkey(() => ChangeVolume(5))),
             new("WindowVisible", "显示 / 隐藏播放窗口", "Ctrl+Alt+T", () => RunHotkey(ToggleWindowVisible)),
+            new("ClickThrough", "鼠标穿透 开 / 关", "Ctrl+Alt+P", () => RunHotkey(ToggleClickThrough)),
             new("OpacityDown", "透明度 -", "Ctrl+Alt+Z", () => RunHotkey(() => ChangeOpacity(-10))),
             new("OpacityUp", "透明度 +", "Ctrl+Alt+X", () => RunHotkey(() => ChangeOpacity(10))),
         };
@@ -182,8 +198,13 @@ public partial class MainWindow : Window
     /// </summary>
     private double EffectiveSpeed => _webMode && _webSpeed > 0.01 ? _webSpeed : _speedRatio;
 
-    /// <summary>控制条上显示的那行字:本地模式是文件名,网页模式是网页标题 / 当前分P。</summary>
-    internal string FileLabel => _webMode ? WebLabel : _fileLabel;
+    /// <summary>控制条上显示的那行字:本地模式是文件名,网页模式是网页标题 / 当前分P,
+    /// 看图/看笔记时是那个文件的名字。</summary>
+    internal string FileLabel => _webMode
+        ? WebLabel
+        : IsViewerMode && _viewerIndex >= 0 && _viewerIndex < _viewerFiles.Count
+            ? Path.GetFileName(_viewerFiles[_viewerIndex])
+            : _fileLabel;
 
     /// <summary>
     /// 网页模式下控制条标题显示什么。
@@ -262,13 +283,15 @@ public partial class MainWindow : Window
         }
     }
 
-    /// <summary>从下拉栏里选一项:网页模式切分P,本地模式切播放列表。</summary>
+    /// <summary>从下拉栏里选一项:网页模式切分P,看图/看笔记翻页,本地模式切播放列表。</summary>
     internal void SelectChapter(ChapterItem item)
     {
         ArgumentNullException.ThrowIfNull(item);
 
         if (_webMode)
             WebSelectPart(item.Index);
+        else if (IsViewerMode)
+            ShowViewerAt(item.Index);
         else
             PlayAt(item.Index);
     }
@@ -285,7 +308,9 @@ public partial class MainWindow : Window
     {
         string signature = _webMode
             ? $"w|{_webCurrentPart}|{_webParts.Count}|{(_webParts.Count > 0 ? _webParts[0] : string.Empty)}"
-            : $"l|{_playlist.Count}|{_index}|{(_playlist.Count > 0 ? _playlist[0] : string.Empty)}";
+            : IsViewerMode
+                ? $"v|{_viewerIndex}|{_viewerFiles.Count}|{(_viewerFiles.Count > 0 ? _viewerFiles[0] : string.Empty)}"
+                : $"l|{_playlist.Count}|{_index}|{(_playlist.Count > 0 ? _playlist[0] : string.Empty)}";
 
         if (signature == _chapterSignature)
             return;
@@ -300,6 +325,13 @@ public partial class MainWindow : Window
                 items.Add(new ChapterItem(i, _webParts[i], i == _webCurrentPart));
 
             _chapterIndex = _webCurrentPart;
+        }
+        else if (IsViewerMode)
+        {
+            for (int i = 0; i < _viewerFiles.Count; i++)
+                items.Add(new ChapterItem(i, $"{i + 1}. {Path.GetFileName(_viewerFiles[i])}", i == _viewerIndex));
+
+            _chapterIndex = _viewerIndex;
         }
         else
         {
@@ -329,6 +361,78 @@ public partial class MainWindow : Window
             _settings.Loop = value;
             _settings.Save();
         }
+    }
+
+    /// <summary>是否记住本地视频的播放进度(设置窗口里的开关)。</summary>
+    // ---------------- 「最近观看」列表(控制条上的最近下拉栏) ----------------
+
+    /// <summary>最近观看的一条。<see cref="ProgressText"/> 是上次看到的位置(没有就是空)。</summary>
+    internal sealed record RecentItem(string Path, string Name, string ProgressText);
+
+    /// <summary>最近看过的文件,最近看的排最前(按需重建,内容没变就复用同一个列表实例)。</summary>
+    internal IReadOnlyList<RecentItem> RecentItems
+    {
+        get
+        {
+            EnsureRecentItems();
+            return _recentItems;
+        }
+    }
+
+    /// <summary>从最近列表里接着看某个文件(进度由断点续播那套自动跳过去)。</summary>
+    internal void PlayRecent(string path)
+    {
+        if (!File.Exists(path))
+        {
+            Growl.Warning(new GrowlInfo { Message = "这个文件已经不在了,已从最近列表里去掉。", WaitTime = 4 });
+
+            _settings.RecentFiles.RemoveAll(p => string.Equals(p, path, StringComparison.OrdinalIgnoreCase));
+            _recentSignature = string.Empty;
+            RaiseStateChanged();
+            return;
+        }
+
+        StartPlaylist(new[] { path }, 0);
+    }
+
+    /// <summary>把文件挪到"最近观看"最前面(去重 + 封顶)。</summary>
+    private void RememberRecentFile(string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+            return;
+
+        _settings.RecentFiles.RemoveAll(p => string.Equals(p, path, StringComparison.OrdinalIgnoreCase));
+        _settings.RecentFiles.Insert(0, path);
+
+        while (_settings.RecentFiles.Count > MaxRecentFiles)
+            _settings.RecentFiles.RemoveAt(_settings.RecentFiles.Count - 1);
+    }
+
+    private void EnsureRecentItems()
+    {
+        string signature = string.Join('\u0001', _settings.RecentFiles.Select(
+            path => path + "|" + (_settings.Resume.TryGetValue(path, out double position) ? position.ToString("0") : "-")));
+
+        if (signature == _recentSignature)
+            return;
+
+        _recentSignature = signature;
+
+        var items = new List<RecentItem>();
+
+        foreach (string path in _settings.RecentFiles)
+        {
+            if (!File.Exists(path))
+                continue;
+
+            string progress = _settings.Resume.TryGetValue(path, out double position) && position >= ResumeMinimumSeconds
+                ? FormatTime(TimeSpan.FromSeconds(position))
+                : string.Empty;
+
+            items.Add(new RecentItem(path, Path.GetFileName(path), progress));
+        }
+
+        _recentItems = items;
     }
 
     /// <summary>是否记住本地视频的播放进度(设置窗口里的开关)。</summary>
@@ -362,6 +466,10 @@ public partial class MainWindow : Window
     internal void TogglePlayPause()
     {
         if (!_ready)
+            return;
+
+        // 看图 / 看笔记没有"播放"这回事。
+        if (IsViewerMode)
             return;
 
         // 网页模式下这个键控制页面里的 <video>。
@@ -454,14 +562,16 @@ public partial class MainWindow : Window
     }
 
     /// <summary>
-    /// 上一集 / 下一集。网页模式下切的是页面里的分P ——
-    /// 以前这里直接走 <see cref="PlayAt"/>,而它一进来就"退出网页模式",
-    /// 于是按一下下一集整个播放器就跳回本地模式了(还什么都不播)。
+    /// 上一集 / 下一集。三种内容各走各的:网页模式切分P,看图/看笔记翻到上一条,本地切播放列表。
+    /// (以前这里直接走 <see cref="PlayAt"/>,而它一进来就"退出网页模式",
+    /// 于是按一下下一集整个播放器就跳回本地模式了。)
     /// </summary>
     internal void PlayPrevious()
     {
         if (_webMode)
             WebSelectAdjacentPart(-1);
+        else if (IsViewerMode)
+            ShowViewerAt(_viewerIndex - 1);
         else
             PlayAt(_index - 1);
     }
@@ -470,6 +580,8 @@ public partial class MainWindow : Window
     {
         if (_webMode)
             WebSelectAdjacentPart(1);
+        else if (IsViewerMode)
+            ShowViewerAt(_viewerIndex + 1);
         else
             PlayAt(_index + 1);
     }
@@ -857,6 +969,82 @@ public partial class MainWindow : Window
 
     [DllImport("user32.dll")]
     private static extern bool SetForegroundWindow(IntPtr hWnd);
+
+    private const int GWL_EXSTYLE = -20;
+
+    /// <summary>窗口对鼠标"透明":点击/滚轮直接穿过它落到下面的窗口(游戏)上。</summary>
+    private const int WS_EX_TRANSPARENT = 0x00000020;
+
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern int GetWindowLong(IntPtr hWnd, int nIndex);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern int SetWindowLong(IntPtr hWnd, int nIndex, int dwNewLong);
+
+    // ---------------- 位置预设(吸附到屏幕某个角) ----------------
+
+    /// <summary>屏幕的四个角(按窗口所在的那台显示器算)。</summary>
+    internal enum ScreenCorner
+    {
+        TopLeft,
+        TopRight,
+        BottomLeft,
+        BottomRight
+    }
+
+    private const uint MONITOR_DEFAULTTONEAREST = 2;
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr MonitorFromWindow(IntPtr hwnd, uint dwFlags);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool GetMonitorInfo(IntPtr hMonitor, ref MonitorInfo lpmi);
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct MonitorInfo
+    {
+        public int cbSize;
+        public NativeRect rcMonitor;
+        public NativeRect rcWork;
+        public uint dwFlags;
+    }
+
+    /// <summary>
+    /// 把窗口挪到屏幕某个角。用显示器<b>工作区</b>(rcWork)算,所以不会压到任务栏;
+    /// 留 16px 边距,贴边太死在小窗形态下反而不好看也不好抓。
+    /// </summary>
+    internal void MoveToScreenCorner(ScreenCorner corner)
+    {
+        IntPtr monitor = MonitorFromWindow(new WindowInteropHelper(this).Handle, MONITOR_DEFAULTTONEAREST);
+        var info = new MonitorInfo { cbSize = Marshal.SizeOf<MonitorInfo>() };
+
+        if (!GetMonitorInfo(monitor, ref info))
+            return;
+
+        // 系统给的是物理像素,窗口的 Left/Top 是 DIP —— 高 DPI 下必须换算(和拖边调整大小同一个坑)。
+        var dpi = System.Windows.Media.VisualTreeHelper.GetDpi(this);
+        const double Margin = 16;
+
+        double left = (info.rcWork.Left / dpi.DpiScaleX) + Margin;
+        double top = (info.rcWork.Top / dpi.DpiScaleY) + Margin;
+        double right = (info.rcWork.Right / dpi.DpiScaleX) - Width - Margin;
+        double bottom = (info.rcWork.Bottom / dpi.DpiScaleY) - Height - Margin;
+
+        // 窗口比工作区还大时,以左上为准(免得算出负数跑到屏幕外面去)。
+        Left = Math.Round(corner is ScreenCorner.TopRight or ScreenCorner.BottomRight ? Math.Max(left, right) : left);
+        Top = Math.Round(corner is ScreenCorner.BottomLeft or ScreenCorner.BottomRight ? Math.Max(top, bottom) : top);
+
+        Growl.Info($"已移到{Cornername(corner)}", "corner");
+    }
+
+    private static string Cornername(ScreenCorner corner) => corner switch
+    {
+        ScreenCorner.TopLeft => "左上角",
+        ScreenCorner.TopRight => "右上角",
+        ScreenCorner.BottomLeft => "左下角",
+        _ => "右下角"
+    };
 
     [DllImport("user32.dll")]
     private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint pid);
@@ -1356,6 +1544,42 @@ public partial class MainWindow : Window
         Growl.Info($"画面透明度 {_settings.WindowOpacity * 100:0}%{suffix}", "opacity");
     }
 
+    /// <summary>音量 ±(全局热键,和滚轮调音量走同一条路径)。</summary>
+    private void ChangeVolume(double delta)
+    {
+        ApplyVolume(_volumePercent + delta);
+
+        // 固定 token:连按快捷键时只刷新同一条提示,不会叠一屏。
+        Growl.Info(_muted ? "静音" : $"音量 {_volumePercent:0}%", "volume");
+    }
+
+    // ---------------- 鼠标穿透 ----------------
+
+    /// <summary>
+    /// 鼠标穿透:开着时点击直接落到下面的游戏上,小窗只当"看板"用
+    /// (看教程视频时不影响操作)。控制条是独立窗口,照样能点。
+    /// </summary>
+    internal bool ClickThrough => _clickThrough;
+
+    internal void ToggleClickThrough()
+    {
+        _clickThrough = !_clickThrough;
+
+        IntPtr handle = new WindowInteropHelper(this).Handle;
+        int style = GetWindowLong(handle, GWL_EXSTYLE);
+
+        SetWindowLong(handle, GWL_EXSTYLE,
+            _clickThrough ? style | WS_EX_TRANSPARENT : style & ~WS_EX_TRANSPARENT);
+
+        // 网页模式下穿透 = 连网页也点不到了(鼠标转发是我们自己在做的),
+        // 得说清楚,不然用户会以为网页卡死了。
+        string hint = _webMode ? "(网页将点不到,只能用热键和控制条)" : "(点击会落到游戏上)";
+
+        Growl.Info(_clickThrough ? $"鼠标穿透:开 {hint}" : "鼠标穿透:关", "clickthrough");
+
+        RaiseStateChanged();
+    }
+
     // ---------------- 打开与播放 ----------------
 
     /// <summary>打开文件对话框。控制条上的"打开"按钮也走这里,故为 internal。</summary>
@@ -1363,9 +1587,18 @@ public partial class MainWindow : Window
     {
         var dialog = new OpenFileDialog
         {
-            Title = "选择视频",
+            Title = "选择视频 / 图片 / 笔记",
             Multiselect = true,
-            Filter = "视频文件|*.mp4;*.m4v;*.mov;*.wmv;*.avi;*.mkv;*.webm;*.flv;*.ts;*.mpg;*.mpeg;*.3gp|所有文件|*.*"
+            Filter =
+                "视频文件|*.mp4;*.m4v;*.mov;*.wmv;*.avi;*.mkv;*.webm;*.flv;*.ts;*.mpg;*.mpeg;*.3gp|" +
+                "图片|*.png;*.jpg;*.jpeg;*.gif;*.bmp;*.webp;*.tif;*.tiff|" +
+                "笔记 / 文本|*.md;*.markdown;*.txt;*.log;*.json;*.ini;*.yml;*.yaml;*.csv|" +
+                "PDF|*.pdf|" +
+                "所有支持的格式|" +
+                "*.mp4;*.m4v;*.mov;*.wmv;*.avi;*.mkv;*.webm;*.flv;*.ts;*.mpg;*.mpeg;*.3gp;" +
+                "*.png;*.jpg;*.jpeg;*.gif;*.bmp;*.webp;*.tif;*.tiff;" +
+                "*.md;*.markdown;*.txt;*.log;*.json;*.ini;*.yml;*.yaml;*.csv;*.pdf|" +
+                "所有文件|*.*"
         };
 
         if (!string.IsNullOrWhiteSpace(_settings.LastDirectory) && Directory.Exists(_settings.LastDirectory))
@@ -1374,10 +1607,41 @@ public partial class MainWindow : Window
         IntPtr previous = GetForegroundWindow();
 
         if (dialog.ShowDialog(this) == true && dialog.FileNames.Length > 0)
-            StartPlaylist(dialog.FileNames, 0);
+            OpenFilesByType(dialog.FileNames);
 
         // 对话框关掉后把前台还给游戏,省得每次选完片还得再点一下游戏。
         GiveBackFocus(previous);
+    }
+
+    /// <summary>
+    /// 按扩展名分流:视频 → 播放列表,PDF → 内置浏览器,图片 / 笔记 → 查看区。
+    /// 混着给的时候以第一个文件的类型为准(和拖文件夹时"按类型各走各的"相比,
+    /// 这样用户心里更好预测)。
+    /// </summary>
+    private void OpenFilesByType(IReadOnlyList<string> paths)
+    {
+        List<string> existing = paths.Where(File.Exists).ToList();
+
+        if (existing.Count == 0)
+            return;
+
+        _settings.LastDirectory = Path.GetDirectoryName(existing[0]);
+
+        string first = existing[0];
+
+        if (IsVideoFile(first))
+        {
+            StartPlaylist(existing.Where(IsVideoFile).ToList(), 0);
+            return;
+        }
+
+        if (IsPdfFile(first))
+        {
+            OpenPdf(first);
+            return;
+        }
+
+        OpenViewer(existing, 0);
     }
 
     private void StartPlaylist(IReadOnlyList<string> files, int startIndex)
@@ -1398,6 +1662,9 @@ public partial class MainWindow : Window
         // 换集之前先把"当前这一集看到哪儿了"记下来 —— 否则看了半集切走,进度就丢了。
         SaveResumePosition(persist: true);
 
+        // 播视频 / 进网页都要用画面:把"看图看笔记"那套收掉。
+        ExitViewer();
+
         // 一旦播本地视频,就从网页模式切回来(两个模式不共存)。
         if (_webMode)
             ExitWebMode();
@@ -1417,6 +1684,9 @@ public partial class MainWindow : Window
             ? saved
             : 0;
         _resumeApplied = false;
+
+        // "最近观看"记的是真正开始播的那个文件 —— 切集之后排第一的就是当前这一集。
+        RememberRecentFile(_currentMediaPath);
 
         try
         {
@@ -1535,6 +1805,19 @@ public partial class MainWindow : Window
 
         while (_settings.Resume.Count > MaxEntries)
             _settings.Resume.Remove(_settings.Resume.Keys.First());
+
+        // 「最近观看」也跟着清一遍(同一个文件可能已经不在硬盘上了)。
+        _settings.RecentFiles.RemoveAll(path =>
+        {
+            try
+            {
+                return !File.Exists(path);
+            }
+            catch
+            {
+                return true;
+            }
+        });
     }
 
     /// <summary>打开文件之后跳到上次的位置。只跳一次,而且只在"真的看过一半"时跳。</summary>
@@ -1568,6 +1851,10 @@ public partial class MainWindow : Window
 
     private void Seek(double seconds)
     {
+        // 看图 / 看笔记没有时间轴可跳。
+        if (IsViewerMode)
+            return;
+
         // 网页模式下快进 / 快退直接作用在页面里的 <video> 上。
         if (_webMode)
         {
@@ -1662,6 +1949,17 @@ public partial class MainWindow : Window
     {
         if (!_ready || _isScrubbing)
             return;
+
+        // 看图 / 看笔记:没有时间轴,进度条也收起来了。
+        if (IsViewerMode)
+        {
+            TimeText.Text = "--:-- / --:--";
+
+            _suppressProgressEvent = true;
+            ProgressSlider.Value = 0;
+            _suppressProgressEvent = false;
+            return;
+        }
 
         // 网页模式:进度不是 MediaElement 给的,而是每 200ms 从页面里那个 <video> 问来的
         // (见 PollWebState)。
@@ -1764,6 +2062,9 @@ public partial class MainWindow : Window
 
     private void SeekToPercent(double percent)
     {
+        if (IsViewerMode)
+            return;
+
         if (_webMode)
         {
             if (_webDuration <= 0.01)
@@ -1842,6 +2143,10 @@ public partial class MainWindow : Window
 
     private void Video_MouseWheel(object sender, MouseWheelEventArgs e)
     {
+        // 看笔记时滚轮留给文档滚动(查看区自己是 ScrollViewer,它先收到事件)。
+        if (IsViewerMode)
+            return;
+
         ApplyVolume(_volumePercent + (e.Delta > 0 ? 5 : -5));
         e.Handled = true;
     }
@@ -1877,6 +2182,8 @@ public partial class MainWindow : Window
 
     private void Window_DragOver(object sender, DragEventArgs e)
     {
+        // 网页模式下 WebView 会自己处理拖入(实测:拖文件进来会落到我们的窗口处理器上,
+        // 自动切到本地播放),所以这里统一按"支持的格式"给反馈。
         e.Effects = e.Data.GetDataPresent(DataFormats.FileDrop) ? DragDropEffects.Copy : DragDropEffects.None;
         e.Handled = true;
     }
@@ -1889,30 +2196,34 @@ public partial class MainWindow : Window
         if (e.Data.GetData(DataFormats.FileDrop) is not string[] dropped || dropped.Length == 0)
             return;
 
-        var videos = new List<string>();
+        // 拖文件夹:把里面的视频 / 图片 / 笔记一起收进来(按路径排序,顺序更符合直觉)。
+        var files = new List<string>();
 
         foreach (string path in dropped)
         {
             if (Directory.Exists(path))
             {
-                // 拖入文件夹时,连同子目录一起收集视频并按路径排序,顺序更符合直觉。
-                videos.AddRange(Directory.EnumerateFiles(path, "*.*", SearchOption.AllDirectories)
-                    .Where(IsVideoFile)
+                files.AddRange(Directory.EnumerateFiles(path, "*.*", SearchOption.AllDirectories)
+                    .Where(IsSupportedFile)
                     .OrderBy(p => p, StringComparer.OrdinalIgnoreCase));
             }
-            else if (File.Exists(path) && IsVideoFile(path))
+            else if (File.Exists(path) && IsSupportedFile(path))
             {
-                videos.Add(path);
+                files.Add(path);
             }
         }
 
-        if (videos.Count == 0)
+        if (files.Count == 0)
         {
-            Growl.Warning(new GrowlInfo { Message = "没找到可播放的视频文件。", WaitTime = 3 });
+            Growl.Warning(new GrowlInfo
+            {
+                Message = "这些文件看不了 —— 支持视频、图片、笔记(md/txt)和 PDF。",
+                WaitTime = 3
+            });
             return;
         }
 
-        StartPlaylist(videos, 0);
+        OpenFilesByType(files);
     }
 
     private static bool IsVideoFile(string path)

@@ -43,6 +43,12 @@ public sealed class AppSettings
     /// <summary>是否记住本地视频的播放进度(下次打开同一个文件自动接着看)。</summary>
     public bool RememberPosition { get; set; } = true;
 
+    /// <summary>
+    /// 「最近观看」:路径列表,最近看的排最前(控制条上的最近下拉栏用它)。
+    /// 进度不在这里,单独存在 <see cref="Resume"/> 里 —— 两者按路径关联。
+    /// </summary>
+    public List<string> RecentFiles { get; set; } = new();
+
     /// <summary>启动时自动检查更新(一天最多查一次,见 MainWindow.AutoCheckUpdatesAsync)。</summary>
     public bool CheckUpdatesOnStart { get; set; } = true;
 
@@ -84,6 +90,7 @@ public sealed class AppSettings
                 {
                     loaded.Hotkeys ??= new Dictionary<string, string>();
                     loaded.Resume ??= new Dictionary<string, double>();
+                    loaded.RecentFiles ??= new List<string>();
                     return loaded;
                 }
             }

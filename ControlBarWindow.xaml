@@ -210,7 +210,165 @@
                            Foreground="#B3FFFFFF"
                            Text="CheatSheet" />
 
+                <!-- 鼠标穿透是个"开了容易忘"的状态,给它一个可见的标记 -->
+                <Border x:Name="ClickThroughChip"
+                        Visibility="Collapsed"
+                        Margin="4,0,2,0"
+                        Padding="6,2"
+                        CornerRadius="4"
+                        Background="#332E90FF"
+                        VerticalAlignment="Center">
+                    <TextBlock Text="穿透中"
+                               FontSize="11"
+                               Foreground="#FF8EC2FF" />
+                </Border>
+
                 <Border Style="{StaticResource BarSeparator}" />
+
+                <!-- 「播放器」下拉栏:网页模式下把播放器自己的画质 / 弹幕暴露出来,
+                     省得为了切画质去点小窗里 B 站那套控制条 -->
+                <ToggleButton x:Name="PlayerToggle"
+                              Style="{StaticResource ChapterToggleButton}"
+                              Visibility="Collapsed"
+                              Click="PlayerToggle_Click"
+                              ToolTip="播放器设置:画质 / 弹幕(网页模式)" />
+
+                <Popup x:Name="PlayerPopup"
+                       PlacementTarget="{Binding ElementName=PlayerToggle}"
+                       Placement="Bottom"
+                       VerticalOffset="2"
+                       StaysOpen="False"
+                       AllowsTransparency="True"
+                       PopupAnimation="Fade"
+                       Opened="PlayerPopup_Opened"
+                       Closed="PlayerPopup_Closed">
+                    <Border Background="#F215171B"
+                            BorderBrush="#33FFFFFF"
+                            BorderThickness="1"
+                            CornerRadius="8"
+                            Padding="6,4,6,6"
+                            Margin="0,0,8,8">
+                        <StackPanel MinWidth="200">
+                            <TextBlock Text="画质"
+                                       Margin="6,4,4,6"
+                                       FontSize="11"
+                                       Foreground="#8CFFFFFF" />
+
+                            <ItemsControl x:Name="QualityList">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Button Style="{StaticResource ChapterItemButton}"
+                                                Tag="{Binding}"
+                                                ToolTip="{Binding Label}"
+                                                Click="QualityItem_Click">
+                                            <Grid Width="180">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="16" />
+                                                    <ColumnDefinition Width="*" />
+                                                </Grid.ColumnDefinitions>
+
+                                                <TextBlock Grid.Column="0"
+                                                           Text="&#xE73E;"
+                                                           FontFamily="Segoe MDL2 Assets"
+                                                           FontSize="11"
+                                                           Foreground="#FF2E90FF"
+                                                           VerticalAlignment="Center">
+                                                    <TextBlock.Style>
+                                                        <Style TargetType="TextBlock">
+                                                            <Setter Property="Visibility" Value="Hidden" />
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding IsCurrent}" Value="True">
+                                                                    <Setter Property="Visibility" Value="Visible" />
+                                                                </DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </TextBlock.Style>
+                                                </TextBlock>
+
+                                                <TextBlock Grid.Column="1"
+                                                           Text="{Binding Label}"
+                                                           TextTrimming="CharacterEllipsis"
+                                                           VerticalAlignment="Center" />
+                                            </Grid>
+                                        </Button>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+
+                            <Border Height="1" Margin="6,6,6,6" Background="#26FFFFFF" />
+
+                            <Button Style="{StaticResource ChapterItemButton}"
+                                    Click="Danmaku_Click">
+                                <Grid Width="180">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="弹幕" VerticalAlignment="Center" />
+                                    <TextBlock x:Name="DanmakuStateText"
+                                               Grid.Column="1"
+                                               VerticalAlignment="Center"
+                                               Foreground="#B3FFFFFF" />
+                                </Grid>
+                            </Button>
+                        </StackPanel>
+                    </Border>
+                </Popup>
+
+                <ToggleButton x:Name="RecentToggle"
+                              Style="{StaticResource ChapterToggleButton}"
+                              Visibility="Collapsed"
+                              Margin="1,0,1,0"
+                              Click="RecentToggle_Click"
+                              ToolTip="最近看过的视频(带上次的进度),点一下接着看" />
+
+                <Popup x:Name="RecentPopup"
+                       PlacementTarget="{Binding ElementName=RecentToggle}"
+                       Placement="Bottom"
+                       VerticalOffset="2"
+                       StaysOpen="False"
+                       AllowsTransparency="True"
+                       PopupAnimation="Fade"
+                       Opened="RecentPopup_Opened"
+                       Closed="RecentPopup_Closed">
+                    <Border Background="#F215171B"
+                            BorderBrush="#33FFFFFF"
+                            BorderThickness="1"
+                            CornerRadius="8"
+                            Padding="4"
+                            Margin="0,0,8,8">
+                        <ScrollViewer MaxHeight="340" VerticalScrollBarVisibility="Auto">
+                            <ItemsControl x:Name="RecentList">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Button Style="{StaticResource ChapterItemButton}"
+                                                Tag="{Binding}"
+                                                ToolTip="{Binding Path}"
+                                                Click="RecentItem_Click">
+                                            <Grid Width="360">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="Auto" />
+                                                </Grid.ColumnDefinitions>
+
+                                                <TextBlock Grid.Column="0"
+                                                           Text="{Binding Name}"
+                                                           TextTrimming="CharacterEllipsis"
+                                                           VerticalAlignment="Center" />
+                                                <TextBlock Grid.Column="1"
+                                                           Margin="10,0,0,0"
+                                                           Text="{Binding ProgressText}"
+                                                           FontFamily="Consolas"
+                                                           Foreground="#B3FFFFFF"
+                                                           VerticalAlignment="Center" />
+                                            </Grid>
+                                        </Button>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </ScrollViewer>
+                    </Border>
+                </Popup>
 
                 <!-- 选集下拉栏:网页模式 = B 站的分P,本地模式 = 播放列表。
                      只有一项时收起来(没得选)。 -->

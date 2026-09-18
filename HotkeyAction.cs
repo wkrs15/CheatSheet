@@ -46,8 +46,12 @@ public sealed class HotkeyAction : INotifyPropertyChanged
 
             _gesture = value;
             OnPropertyChanged();
+            OnPropertyChanged(nameof(GestureDisplay));
         }
     }
+
+    /// <summary>设置面板上显示用的写法(把 OemComma / Up 这类名字换成人话)。</summary>
+    public string GestureDisplay => HotkeyManager.FriendlyGesture(_gesture);
 
     /// <summary>该行的状态说明(录制提示 / 被占用提示等)。</summary>
     public string Status

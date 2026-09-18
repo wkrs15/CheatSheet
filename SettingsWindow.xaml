@@ -149,6 +149,20 @@
 
                         <Border Style="{StaticResource SectionRule}" />
 
+                        <TextBlock Text="窗口位置" Style="{StaticResource SectionTitle}" />
+                        <StackPanel Orientation="Horizontal">
+                            <Button Content="左上" Width="64" Height="26" Click="CornerTopLeft_Click" />
+                            <Button Content="右上" Width="64" Height="26" Margin="8,0,0,0" Click="CornerTopRight_Click" />
+                            <Button Content="左下" Width="64" Height="26" Margin="8,0,0,0" Click="CornerBottomLeft_Click" />
+                            <Button Content="右下" Width="64" Height="26" Margin="8,0,0,0" Click="CornerBottomRight_Click" />
+                        </StackPanel>
+                        <TextBlock Margin="0,8,0,0"
+                                   TextWrapping="Wrap"
+                                   Foreground="{DynamicResource SecondaryTextBrush}"
+                                   Text="一键把播放窗口贴到当前显示器的角上(避开任务栏)。游戏 UI 一般边角留空,正好放它。" />
+
+                        <Border Style="{StaticResource SectionRule}" />
+
                         <TextBlock Text="声音与速度" Style="{StaticResource SectionTitle}" />
 
                         <Grid>
@@ -233,7 +247,7 @@
                                         <TextBlock Text="{Binding Name}" VerticalAlignment="Center" />
                                         <Button Grid.Column="1"
                                                 Style="{StaticResource HotkeyButton}"
-                                                Content="{Binding Gesture}"
+                                                Content="{Binding GestureDisplay}"
                                                 Click="HotkeyCapture_Click"
                                                 Tag="{Binding}" />
                                         <TextBlock Grid.Column="2"

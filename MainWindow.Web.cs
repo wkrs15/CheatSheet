@@ -136,6 +136,9 @@ public partial class MainWindow
         _webMode = true;
         _webCurrentUrl = url ?? _settings.WebHomeUrl;
 
+        // 网页要用画面:把"看图看笔记"那套收掉(和本地视频一个规矩)。
+        ExitViewer();
+
         // 还没拿到网页标题之前,控制条显示"浏览器模式" —— 不能留着上一条本地视频的文件名。
         _webTitle = string.Empty;
 
@@ -166,6 +169,9 @@ public partial class MainWindow
 
         // 下次进来是新页面,选集列表和网页标题都重新来。
         _webTitle = string.Empty;
+        _webQualities.Clear();
+        _webQualityIndex = -1;
+        _webDanmakuOn = null;
         ClearWebParts();
 
         // 控制条 / 窗口标题改回本地那一套(本地视频还开着的话,文件名接着显示)。
@@ -403,6 +409,15 @@ public partial class MainWindow
             // 新页面里的 <video> 还不知道我们设了倍速,重新写一次。
             WebSetSpeed(_speedRatio);
         }
+        else if ((WebView?.CoreWebView2?.Source ?? string.Empty).StartsWith("file:", StringComparison.OrdinalIgnoreCase))
+        {
+            // 本地文件打不开多半是 PDF 这类:内置浏览器的查看器没渲染出来。
+            Growl.Error(new GrowlInfo
+            {
+                Message = "这个文件内置浏览器打不开(可以试试用系统默认程序打开)。",
+                WaitTime = 5
+            });
+        }
 
         // 换了文档:上一个视频的选集列表立刻作废(下拉栏不能还挂着它的分P),
         // 新页面里有没有选集、有哪些,交给下一轮读取去认。
@@ -444,7 +459,8 @@ public partial class MainWindow
         p: v.paused,
         t: v.currentTime,
         r: v.playbackRate,
-        d: isFinite(v.duration) ? v.duration : 0
+        d: isFinite(v.duration) ? v.duration : 0,
+        e: v.ended
     };
 })();";
 
@@ -498,6 +514,15 @@ public partial class MainWindow
             _webHasVideo = true;
             _webVideoPlaying = !root.GetProperty("p").GetBoolean();
             _webPosition = root.GetProperty("t").GetDouble();
+
+            // 播完了就自动接下一P(和本地播放列表的自动续播对齐)。
+            bool ended = root.TryGetProperty("e", out System.Text.Json.JsonElement endedElement)
+                         && endedElement.ValueKind == System.Text.Json.JsonValueKind.True;
+
+            if (ended)
+                HandleWebVideoEnded();
+            else
+                _webEndedHandled = false;
 
             if (_webVideoPlaying)
                 _webPlayedOnce = true;
@@ -855,6 +880,25 @@ public partial class MainWindow
     /// <summary>页面里"播放器自己的选集列表"里每一项的 CSS 选择器(B 站 2026-09 实测)。</summary>
     private const string PartItemSelector = ".bpx-player-ctrl-eplist-multi-menu-item";
 
+    /// <summary>画质菜单里的每一项(2026-09 实测:当前项带 <c>bpx-state-active</c>)。</summary>
+    private const string QualityItemSelector = ".bpx-player-ctrl-quality-menu-item";
+
+    /// <summary>弹幕开关里的那个 checkbox(2026-09 实测:勾选状态就是弹幕的开 / 关)。</summary>
+    private const string DanmakuSwitchSelector = ".bpx-player-dm-switch input";
+
+    /// <summary>页面里画质菜单的原始文字(带"大会员/登录即享"这类后缀)。</summary>
+    private readonly List<string> _webQualities = new();
+
+    /// <summary>当前画质是第几项(-1 = 没读到)。</summary>
+    private int _webQualityIndex = -1;
+
+    /// <summary>弹幕开着吗(null = 页面上没这个开关)。</summary>
+    private bool? _webDanmakuOn;
+
+    /// <summary>画质列表的显示版本(按签名缓存,控制条每次刷新都来读它)。</summary>
+    private IReadOnlyList<ChapterItem> _webQualityItems = Array.Empty<ChapterItem>();
+    private string _webQualityItemsSignature = string.Empty;
+
     /// <summary>
     /// 页面里选集列表的标题(第 0 项 = 第 1 集)。
     /// <para>
@@ -871,25 +915,28 @@ public partial class MainWindow
     /// <summary>列表内容 + 当前项拼的签名:变了才通知界面刷新(否则 5 次/秒地重建下拉栏)。</summary>
     private string _webPartsSignature = string.Empty;
 
-    /// <summary>上次读列表的时间。</summary>
+    /// <summary>上次读列表的时间(轮询里按间隔读,不必每 200ms 都读)。</summary>
     private DateTime _webPartsReadAt = DateTime.MinValue;
+
+    /// <summary>这次的"播完了"是否已经处理过 —— 一轮结束只切一次集。</summary>
+    private bool _webEndedHandled;
 
     internal IReadOnlyList<string> WebParts => _webParts;
 
     internal int WebCurrentPart => _webCurrentPart;
 
     /// <summary>
-    /// 读一遍页面里的选集列表(轮询里按间隔调用,不必每 200ms 都读)。
+    /// 读一遍页面里"播放器自己的东西":选集列表、画质菜单、弹幕开关
+    /// (轮询里按间隔调用,不必每 200ms 都读)。
     /// <para>
-    /// 当前项靠 B 站自己打的 <c>bpx-state-multi-active-item</c> 类判断 —— 比解析网址里的
-    /// <c>?p=</c> 准:站内切换时地址栏不一定会立刻变,而高亮项是点击的直接结果。
+    /// 当前项一律靠 B 站自己打的类判断,而不是解析网址 —— 站内切换时地址栏不一定会立刻变,
+    /// 而高亮项是点击的直接结果;画质 / 弹幕的状态更是只存在于播放器自己的 DOM 里。
     /// </para>
     /// </summary>
     private async Task ReadWebPartsAsync(CoreWebView2 core)
     {
         const string script = "(() => { " +
             " const items = [...document.querySelectorAll('" + PartItemSelector + "')];" +
-            " if (!items.length) return null;" +
             " let current = -1;" +
             " const titles = items.map((el, i) => {" +
             // 取第一个带高亮类的:合集视频里可能有多段列表(分P / 合集),
@@ -897,41 +944,68 @@ public partial class MainWindow
             "   if (current < 0 && el.classList.contains('bpx-state-multi-active-item')) current = i;" +
             "   return (el.textContent || '').replace(/\\s+/g, ' ').trim();" +
             " });" +
-            " return { t: titles, c: current };" +
+            " const qs = [...document.querySelectorAll('" + QualityItemSelector + "')];" +
+            " const dm = document.querySelector('" + DanmakuSwitchSelector + "');" +
+            " return { t: titles, c: current," +
+            "   q: qs.map(el => (el.textContent || '').replace(/\\s+/g, ' ').trim())," +
+            "   qi: qs.findIndex(el => el.classList.contains('bpx-state-active'))," +
+            "   dm: dm ? !!dm.checked : null };" +
             "})();";
 
         try
         {
             string json = await core.ExecuteScriptAsync(script);
 
-            string signature;
-
             if (string.IsNullOrEmpty(json) || json == "null")
             {
-                // 这个页面没有选集列表(单P 视频、或者播放器 / 面板还没渲染出来)。
+                // 页面里还没有播放器(或者刚导航走):三样都清掉。
                 ClearWebParts();
-                signature = string.Empty;
+                _webQualities.Clear();
+                _webQualityIndex = -1;
+                _webDanmakuOn = null;
+
+                if (_webPartsSignature.Length > 0)
+                {
+                    _webPartsSignature = string.Empty;
+                    UpdateWebLabel();
+                }
+
+                return;
             }
-            else
+
+            using var doc = System.Text.Json.JsonDocument.Parse(json);
+            System.Text.Json.JsonElement root = doc.RootElement;
+
+            _webParts.Clear();
+
+            foreach (System.Text.Json.JsonElement title in root.GetProperty("t").EnumerateArray())
+                _webParts.Add(title.GetString() ?? string.Empty);
+
+            _webCurrentPart = root.GetProperty("c").GetInt32();
+
+            _webQualities.Clear();
+
+            foreach (System.Text.Json.JsonElement quality in root.GetProperty("q").EnumerateArray())
+                _webQualities.Add(quality.GetString() ?? string.Empty);
+
+            _webQualityIndex = root.GetProperty("qi").GetInt32();
+
+            System.Text.Json.JsonElement danmaku = root.GetProperty("dm");
+            _webDanmakuOn = danmaku.ValueKind switch
             {
-                using var doc = System.Text.Json.JsonDocument.Parse(json);
-                System.Text.Json.JsonElement root = doc.RootElement;
+                System.Text.Json.JsonValueKind.True => true,
+                System.Text.Json.JsonValueKind.False => false,
+                _ => null
+            };
 
-                _webParts.Clear();
-
-                foreach (System.Text.Json.JsonElement title in root.GetProperty("t").EnumerateArray())
-                    _webParts.Add(title.GetString() ?? string.Empty);
-
-                _webCurrentPart = root.GetProperty("c").GetInt32();
-                signature = BuildWebPartsSignature();
-            }
+            string signature = BuildWebPartsSignature();
 
             if (signature == _webPartsSignature)
                 return;
 
             _webPartsSignature = signature;
 
-            // 选集列表变了(读到了、或者当前项换了):控制条那行字跟着变。
+            // 选集 / 画质 / 弹幕任一变(读到了、或者当前项换了):控制条和那行标题跟着变。
             UpdateWebLabel();
         }
         catch
@@ -941,9 +1015,10 @@ public partial class MainWindow
     }
 
     private string BuildWebPartsSignature()
-        => _webCurrentPart + "|" + string.Join('\u0001', _webParts);
+        => _webCurrentPart + "|" + _webQualityIndex + "|" + _webDanmakuOn + "|"
+           + string.Join('\u0001', _webParts) + "|" + string.Join('\u0001', _webQualities);
 
-    /// <summary>把选集列表清空(换了文档 / 退出网页模式时用)。</summary>
+    /// <summary>把播放器相关的读取结果清空(换了文档 / 退出网页模式时用)。</summary>
     private void ClearWebParts()
     {
         _webParts.Clear();
@@ -952,8 +1027,7 @@ public partial class MainWindow
         _webPartsReadAt = DateTime.MinValue;
     }
 
-    /// <summary>
-    /// 切到选集列表里的第 <paramref name="index"/> 项:点页面里那一项,走站点自己的切换逻辑。
+    /// <summary>切到选集列表里的第 <paramref name="index"/> 项:点页面里那一项,走站点自己的切换逻辑。
     /// <para>
     /// 这样切集是<b>站内切换</b> —— 不重新加载页面,网页全屏、进度条、播放状态都不被打断。
     /// 早先是"改网址导航"(<c>?p=N</c>),那会让整个页面重载:画面闪一下白、全屏要重新点,
@@ -994,6 +1068,144 @@ public partial class MainWindow
 
         if (target != current)
             WebSelectPart(target);
+    }
+
+    // ---------------- 播放器自己的画质 / 弹幕(控制条上的「播放器」下拉栏) ----------------
+
+    /// <summary>页面上有没有画质菜单(有才显示那个下拉栏)。</summary>
+    internal bool HasWebPlayerOptions => _webQualities.Count > 0;
+
+    /// <summary>当前画质名字(控制条上的按钮显示它)。</summary>
+    internal string WebQualityLabel
+        => _webQualityIndex >= 0 && _webQualityIndex < _webQualities.Count
+            ? CleanQualityLabel(_webQualities[_webQualityIndex])
+            : string.Empty;
+
+    internal bool? WebDanmakuOn => _webDanmakuOn;
+
+    /// <summary>画质菜单的显示列表(按签名缓存,免得控制条每次刷新都重建)。</summary>
+    internal IReadOnlyList<ChapterItem> WebQualityItems
+    {
+        get
+        {
+            if (_webQualityItemsSignature != _webPartsSignature)
+            {
+                _webQualityItemsSignature = _webPartsSignature;
+
+                var items = new List<ChapterItem>(_webQualities.Count);
+
+                for (int i = 0; i < _webQualities.Count; i++)
+                    items.Add(new ChapterItem(i, CleanQualityLabel(_webQualities[i]), i == _webQualityIndex));
+
+                _webQualityItems = items;
+            }
+
+            return _webQualityItems;
+        }
+    }
+
+    /// <summary>
+    /// 画质标签收拾一下:"1080P 60帧大会员" / "720P 准高清登录即享" → "1080P 60帧" / "720P 准高清"。
+    /// 那些后缀讲的是"怎么才能用",在控制条的小胶囊里纯属占地方(原始文本放 ToolTip 里)。
+    /// </summary>
+    private static string CleanQualityLabel(string label)
+    {
+        string cleaned = label;
+
+        foreach (string suffix in new[] { "大会员", "登录即享", "登录免费", "付费" })
+        {
+            if (cleaned.EndsWith(suffix, StringComparison.Ordinal))
+                cleaned = cleaned[..^suffix.Length].TrimEnd();
+        }
+
+        // "自动(360P 流畅)" 在胶囊上太长,只留"自动"。
+        return cleaned.StartsWith("自动(", StringComparison.Ordinal) ? "自动" : cleaned;
+    }
+
+    /// <summary>
+    /// 切画质:点播放器画质菜单里的那一项(站内切换,不重载页面)。
+    /// 需要登录 / 大会员的档位点了也不会生效 —— 那是站点自己的判断,我们照原样暴露。
+    /// </summary>
+    internal void SelectWebQuality(int index)
+    {
+        if (!_webMode || index < 0 || index >= _webQualities.Count)
+            return;
+
+        string script = "(() => { " +
+            " const items = [...document.querySelectorAll('" + QualityItemSelector + "')];" +
+            " const el = items[" + index + "];" +
+            " if (el) el.click();" +
+            "})();";
+
+        _ = ExecuteWebScriptAsync(script);
+
+        // 先按"切过去了"记一笔,控制条按钮立刻跟着变(下一轮读取会纠正)。
+        _webQualityIndex = index;
+        _webPartsSignature = BuildWebPartsSignature();
+        RaiseStateChanged();
+    }
+
+    /// <summary>弹幕开 / 关:点播放器自己的弹幕开关。</summary>
+    internal void ToggleWebDanmaku()
+    {
+        if (!_webMode || _webDanmakuOn is null)
+            return;
+
+        bool turningOff = _webDanmakuOn == true;
+
+        string script = "(() => { const el = document.querySelector('" + DanmakuSwitchSelector + "');" +
+            " if (el) el.click(); })();";
+
+        _ = ExecuteWebScriptAsync(script);
+
+        _webDanmakuOn = !turningOff;
+        _webPartsSignature = BuildWebPartsSignature();
+
+        Growl.Info(turningOff ? "弹幕:关" : "弹幕:开", "danmaku");
+        RaiseStateChanged();
+    }
+
+    /// <summary>页面里那个视频播完了。一次结束只处理一次(轮询 5 次/秒,不加锁会连切好几集)。</summary>
+    private void HandleWebVideoEnded()
+    {
+        if (_webEndedHandled)
+            return;
+
+        _webEndedHandled = true;
+
+        // 还有下一P:接着看。本地播放列表也是这个行为。
+        if (_webCurrentPart >= 0 && _webCurrentPart < _webParts.Count - 1)
+        {
+            WebSelectAdjacentPart(1);
+            _ = NudgeWebPlayAsync();
+            return;
+        }
+
+        // 已经是最后一P:开了循环就回到第一P(B 站自己不会循环整个选集)。
+        if (_settings.Loop && _webParts.Count > 1 && _webCurrentPart >= 0)
+        {
+            WebSelectPart(0);
+            _ = NudgeWebPlayAsync();
+        }
+    }
+
+    /// <summary>
+    /// 切集之后轻推一把:新的一P 有时候不会自动开始播,而"没在播"会立刻触发
+    /// app 的暂停处理(压暗/隐藏窗口),看起来就像自动连播失败了。
+    /// </summary>
+    private async Task NudgeWebPlayAsync()
+    {
+        await Task.Delay(1500);
+
+        if (!_webMode || !_webHasVideo || _webVideoPlaying)
+            return;
+
+        const string script = "(() => { " + PickMainVideoJs +
+            " const v = mainVideo();" +
+            " if (v && v.paused) { const p = v.play(); if (p && p.catch) p.catch(() => {}); }" +
+            " })();";
+
+        await ExecuteWebScriptAsync(script);
     }
 
     /// <summary>

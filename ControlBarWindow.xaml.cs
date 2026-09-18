@@ -86,10 +86,14 @@ public partial class ControlBarWindow : Window
     private bool _editing;
 
     /// <summary>
-    /// 选集下拉栏正开着。和地址栏编辑一样:这期间不能把条收起来 ——
+    /// 选集 / 最近 下拉栏正开着。和地址栏编辑一样:这期间不能把条收起来 ——
     /// 鼠标一旦从屏幕顶端移下来(去点列表),轮询就会判成"该收起",条一藏弹层也跟着没了。
+    /// <para>
+    /// 直接看两个弹层的实际状态,不用自己维护标志位:两个弹层互相切换时
+    /// (StaysOpen=False 会先关掉上一个)"先开后关"的顺序会把标志位清错。
+    /// </para>
     /// </summary>
-    private bool _menuOpen;
+    private bool MenuOpen => ChapterPopup.IsOpen || RecentPopup.IsOpen || PlayerPopup.IsOpen;
 
     /// <summary>开始编辑前的前台窗口(通常是游戏),打完字还给它。</summary>
     private IntPtr _focusBeforeEdit;
@@ -166,7 +170,7 @@ public partial class ControlBarWindow : Window
     {
         // 正在地址栏里打字 / 正开着下拉栏:不管鼠标跑哪去了都别收起,
         // 不然输入框、弹出来的列表会跟着窗口一起消失。
-        if (_editing || _menuOpen)
+        if (_editing || MenuOpen)
         {
             SetVisible(true);
             return;
@@ -216,6 +220,12 @@ public partial class ControlBarWindow : Window
             if (ChapterPopup.IsOpen)
                 ChapterPopup.IsOpen = false;
 
+            if (RecentPopup.IsOpen)
+                RecentPopup.IsOpen = false;
+
+            if (PlayerPopup.IsOpen)
+                PlayerPopup.IsOpen = false;
+
             var fade = new DoubleAnimation(1, 0, FadeOut)
             {
                 EasingFunction = new CubicEase { EasingMode = EasingMode.EaseIn }
@@ -248,6 +258,7 @@ public partial class ControlBarWindow : Window
             SpeedButton.Content = _main.SpeedLabel;
             VolumeSlider.Value = _main.VolumePercent;
             TitleText.Text = _main.FileLabel;
+            ClickThroughChip.Visibility = _main.ClickThrough ? Visibility.Visible : Visibility.Collapsed;
 
             // 地址栏只在浏览器模式下出现。
             AddressRow.Visibility = _main.IsWebMode ? Visibility.Visible : Visibility.Collapsed;
@@ -262,12 +273,107 @@ public partial class ControlBarWindow : Window
                 AddressBox.Text = url;
 
             SyncChapters();
+            SyncRecent();
+            SyncPlayerOptions();
         }
         finally
         {
             _syncing = false;
         }
     }
+
+    /// <summary>把「最近观看」下拉栏刷成主窗口那边的内容(空的时候整条收起来)。</summary>
+    private void SyncRecent()
+    {
+        IReadOnlyList<MainWindow.RecentItem> items = _main.RecentItems;
+
+        if (items.Count == 0)
+        {
+            if (RecentPopup.IsOpen)
+                RecentPopup.IsOpen = false;
+
+            RecentToggle.Visibility = Visibility.Collapsed;
+            RecentList.ItemsSource = null;
+            return;
+        }
+
+        RecentToggle.Visibility = Visibility.Visible;
+
+        // 列表是主窗口缓存着的:内容没变就别换 ItemsSource(否则滚动位置会被弹回去)。
+        if (!ReferenceEquals(RecentList.ItemsSource, items))
+            RecentList.ItemsSource = items;
+
+        // 按钮上直接显示"最近看的那一条",一眼就知道点开是什么。
+        RecentToggle.Content = items[0].Name;
+    }
+
+    /// <summary>
+    /// 「播放器」下拉栏:网页模式下把播放器自己的画质 / 弹幕暴露出来。
+    /// 没读到画质菜单(本地模式、或者播放器还没渲染出来)就整条收起来。
+    /// </summary>
+    private void SyncPlayerOptions()
+    {
+        if (!_main.HasWebPlayerOptions)
+        {
+            if (PlayerPopup.IsOpen)
+                PlayerPopup.IsOpen = false;
+
+            PlayerToggle.Visibility = Visibility.Collapsed;
+            QualityList.ItemsSource = null;
+            return;
+        }
+
+        PlayerToggle.Visibility = Visibility.Visible;
+
+        IReadOnlyList<MainWindow.ChapterItem> qualities = _main.WebQualityItems;
+
+        if (!ReferenceEquals(QualityList.ItemsSource, qualities))
+            QualityList.ItemsSource = qualities;
+
+        string quality = _main.WebQualityLabel;
+        PlayerToggle.Content = quality.Length > 0 ? quality : "播放器";
+
+        DanmakuStateText.Text = _main.WebDanmakuOn switch
+        {
+            true => "开",
+            false => "关",
+            _ => "–"
+        };
+    }
+
+    // ---------------- 播放器下拉栏(画质 / 弹幕) ----------------
+
+    private void PlayerToggle_Click(object sender, RoutedEventArgs e)
+        => PlayerPopup.IsOpen = PlayerToggle.IsChecked == true;
+
+    private void PlayerPopup_Opened(object sender, EventArgs e)
+    {
+        KeepBarAliveForMenu();
+
+        if (PresentationSource.FromVisual(PlayerPopup.Child) is HwndSource source)
+        {
+            IntPtr handle = source.Handle;
+            SetWindowLong(handle, GWL_EXSTYLE,
+                GetWindowLong(handle, GWL_EXSTYLE) | WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW);
+        }
+    }
+
+    private void PlayerPopup_Closed(object sender, EventArgs e)
+    {
+        PlayerToggle.IsChecked = false;
+    }
+
+    private void QualityItem_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button { Tag: MainWindow.ChapterItem item })
+            return;
+
+        PlayerPopup.IsOpen = false;
+        _main.SelectWebQuality(item.Index);
+    }
+
+    private void Danmaku_Click(object sender, RoutedEventArgs e)
+        => _main.ToggleWebDanmaku();
 
     /// <summary>
     /// 把选集下拉栏刷成主窗口那边的当前内容(网页模式 = B 站分P,本地 = 播放列表)。
@@ -312,7 +418,7 @@ public partial class ControlBarWindow : Window
     /// </summary>
     private void ChapterPopup_Opened(object sender, EventArgs e)
     {
-        _menuOpen = true;
+        KeepBarAliveForMenu();
 
         if (PresentationSource.FromVisual(ChapterPopup.Child) is HwndSource source)
         {
@@ -322,9 +428,14 @@ public partial class ControlBarWindow : Window
         }
     }
 
+    /// <summary>
+    /// 弹层一开就先把条亮出来(并挡住自动收起):弹层紧贴条的下沿,
+    /// 而"鼠标已经不在屏幕顶端的 8px 里了"会让轮询立刻开始收条。
+    /// </summary>
+    private void KeepBarAliveForMenu() => SetVisible(true);
+
     private void ChapterPopup_Closed(object sender, EventArgs e)
     {
-        _menuOpen = false;
         ChapterToggle.IsChecked = false;
     }
 
@@ -335,6 +446,38 @@ public partial class ControlBarWindow : Window
 
         ChapterPopup.IsOpen = false;
         _main.SelectChapter(item);
+    }
+
+    // ---------------- 最近观看下拉栏 ----------------
+
+    private void RecentToggle_Click(object sender, RoutedEventArgs e)
+        => RecentPopup.IsOpen = RecentToggle.IsChecked == true;
+
+    private void RecentPopup_Opened(object sender, EventArgs e)
+    {
+        KeepBarAliveForMenu();
+
+        // 和控制条一样:弹层是独立顶层窗口,不补 NOACTIVATE 就会把前台从游戏那儿抢走。
+        if (PresentationSource.FromVisual(RecentPopup.Child) is HwndSource source)
+        {
+            IntPtr handle = source.Handle;
+            SetWindowLong(handle, GWL_EXSTYLE,
+                GetWindowLong(handle, GWL_EXSTYLE) | WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW);
+        }
+    }
+
+    private void RecentPopup_Closed(object sender, EventArgs e)
+    {
+        RecentToggle.IsChecked = false;
+    }
+
+    private void RecentItem_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button { Tag: MainWindow.RecentItem item })
+            return;
+
+        RecentPopup.IsOpen = false;
+        _main.PlayRecent(item.Path);
     }
 
     // ---------------- 地址栏 ----------------

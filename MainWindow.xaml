@@ -105,12 +105,32 @@
                           MediaEnded="Player_MediaEnded"
                           MediaFailed="Player_MediaFailed" />
             <TextBlock x:Name="HintText"
-                       Text="把视频文件拖到这里 · 或点屏幕正上方控制条的打开按钮"
+                       Text="视频 / 图片 / 笔记 / PDF 都可以拖进来 · 或点屏幕正上方控制条的打开按钮"
                        Foreground="#80FFFFFF"
                        FontSize="14"
                        HorizontalAlignment="Center"
                        VerticalAlignment="Center"
                        IsHitTestVisible="False" />
+
+            <!-- 图片 / Markdown / 文本的查看区(「置顶小抄」那一半功能)。
+                 PDF 不在这里 —— 它交给内置浏览器(Edge 自带查看器,能滚动缩放)。
+                 和视频共用同一块画面,所以放在 MediaElement 之上、WebHost 之下。 -->
+            <Grid x:Name="ViewerHost" Visibility="Collapsed">
+                <Image x:Name="ViewerImage"
+                       Stretch="Uniform"
+                       Visibility="Collapsed"
+                       RenderOptions.BitmapScalingMode="HighQuality" />
+
+                <FlowDocumentScrollViewer x:Name="ViewerText"
+                                          Visibility="Collapsed"
+                                          Background="#FF0E0F11"
+                                          Foreground="#FFEDEDED"
+                                          Padding="18,14"
+                                          IsToolBarVisible="False"
+                                          VerticalScrollBarVisibility="Auto"
+                                          FontFamily="Microsoft YaHei UI"
+                                          FontSize="13" />
+            </Grid>
 
             <!-- 网页模式的宿主。WebView 不放 XAML 里,而是按需创建、退出网页模式就销毁
                  (见 MainWindow.Web.cs):它背后是一整组 Edge 进程,只折叠起来的话

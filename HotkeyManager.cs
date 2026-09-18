@@ -183,6 +183,56 @@ public sealed class HotkeyManager : IDisposable
     }
 
     /// <summary>
+    /// 手势的"给人看的写法":D1 → 1、OemComma → ,、Up → ↑……
+    /// <para>
+    /// 只用于界面显示 —— 存进配置、拿去注册的始终是 <see cref="Key"/> 的名字
+    /// (否则解析不回去,热键就注册不上了)。
+    /// </para>
+    /// </summary>
+    public static string FriendlyGesture(string gesture)
+    {
+        if (string.IsNullOrWhiteSpace(gesture))
+            return gesture;
+
+        string[] parts = gesture.Split('+', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+        if (parts.Length == 0)
+            return gesture;
+
+        parts[^1] = FriendlyKeyName(parts[^1]);
+        return string.Join('+', parts);
+    }
+
+    private static string FriendlyKeyName(string name) => name switch
+    {
+        "Up" => "↑",
+        "Down" => "↓",
+        "Left" => "←",
+        "Right" => "→",
+        "Space" => "空格",
+        "Enter" => "回车",
+        "Escape" => "Esc",
+        "Back" => "退格",
+        "Tab" => "Tab",
+        "Prior" => "PgUp",
+        "Next" => "PgDn",
+        "Capital" => "CapsLock",
+        "OemMinus" => "-",
+        "OemPlus" => "=",
+        "OemComma" => ",",
+        "OemPeriod" => ".",
+        "OemQuestion" => "/",
+        "OemSemicolon" => ";",
+        "OemQuotes" => "'",
+        "OemTilde" => "`",
+        "OemPipe" => "\\",
+        "OemOpenBrackets" => "[",
+        "OemCloseBrackets" => "]",
+        _ when name.Length == 2 && name[0] == 'D' && char.IsDigit(name[1]) => name[1].ToString(),
+        _ => name
+    };
+
+    /// <summary>
     /// 判断某个手势对应的按键现在是否还按着。全局热键只有"按下"事件(WM_HOTKEY),
     /// 没有"松开"事件,所以"按住加速、松开恢复"这类功能只能靠轮询它。
     /// </summary>

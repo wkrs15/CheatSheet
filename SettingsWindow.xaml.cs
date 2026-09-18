@@ -191,6 +191,20 @@ public partial class SettingsWindow : Window
     private void Resume_Click(object sender, RoutedEventArgs e)
         => _main.RememberPosition = ResumeBox.IsChecked == true;
 
+    // ---------------- 位置预设 ----------------
+
+    private void CornerTopLeft_Click(object sender, RoutedEventArgs e)
+        => _main.MoveToScreenCorner(MainWindow.ScreenCorner.TopLeft);
+
+    private void CornerTopRight_Click(object sender, RoutedEventArgs e)
+        => _main.MoveToScreenCorner(MainWindow.ScreenCorner.TopRight);
+
+    private void CornerBottomLeft_Click(object sender, RoutedEventArgs e)
+        => _main.MoveToScreenCorner(MainWindow.ScreenCorner.BottomLeft);
+
+    private void CornerBottomRight_Click(object sender, RoutedEventArgs e)
+        => _main.MoveToScreenCorner(MainWindow.ScreenCorner.BottomRight);
+
     private void Loop_Click(object sender, RoutedEventArgs e)
         => _main.LoopPlayback = LoopBox.IsChecked == true;
 
