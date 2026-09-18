@@ -45,9 +45,9 @@ public sealed class AppSettings
 
     /// <summary>
     /// 鼠标停在屏幕顶部多久之后控制条才伸出来(毫秒,0 = 立刻)。
-    /// 给个几千毫秒不至于,但"扫过去点个浏览器标签就被挡一下"确实烦,默认 0.4 秒。
+    /// 默认 0.8 秒:太短的话"扫过去点个浏览器标签"就会被挡一下,而那个动作一天要做几十次。
     /// </summary>
-    public int ControlBarDelayMs { get; set; } = 400;
+    public int ControlBarDelayMs { get; set; } = 800;
 
     /// <summary>
     /// 「最近观看」:本地文件和网页混在一起,最近看的排最前(控制条上的最近下拉栏用它)。
@@ -117,6 +117,11 @@ public sealed class AppSettings
                         foreach (string path in loaded.Resume.Keys.Reverse())
                             loaded.Recents.Add(new RecentEntry { Kind = RecentEntry.LocalKind, Target = path });
                     }
+
+                    // 控制条出现延迟的旧默认是 400ms(实测太短),新默认 800ms ——
+                    // 还是旧默认值的(说明用户没自己挑过)跟着升上去。
+                    if (loaded.ControlBarDelayMs is > 0 and <= 400)
+                        loaded.ControlBarDelayMs = 800;
 
                     return loaded;
                 }

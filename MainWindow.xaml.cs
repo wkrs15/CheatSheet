@@ -492,9 +492,11 @@ public partial class MainWindow : Window
     internal static readonly (string Label, int Milliseconds)[] ControlBarDelayChoices =
     {
         ("立即", 0),
-        ("0.2 秒", 200),
-        ("0.4 秒(默认)", 400),
-        ("0.8 秒", 800)
+        ("0.3 秒", 300),
+        ("0.6 秒", 600),
+        ("0.8 秒(默认)", 800),
+        ("1.2 秒", 1200),
+        ("2 秒", 2000)
     };
 
     /// <summary>拖动窗口边缘时是否按视频比例等比例缩放(设置窗口里的开关)。</summary>

@@ -93,15 +93,19 @@ public partial class SettingsWindow : Window
             LoopBox.IsChecked = _main.LoopPlayback;
             AutoUpdateBox.IsChecked = _main.CheckUpdatesOnStart;
 
-            // 控制条出现延迟:配置里存的是毫秒,下拉框里选最接近的那一档。
-            int delayIndex = 2;
+            // 控制条出现延迟:配置里存的是毫秒,下拉框里选**最接近**的那一档
+            // (档位以后可能会调整,不能假设存的值一定在列表里)。
+            int delayIndex = 0;
+            int bestDistance = int.MaxValue;
 
             for (int i = 0; i < MainWindow.ControlBarDelayChoices.Length; i++)
             {
-                if (MainWindow.ControlBarDelayChoices[i].Milliseconds == _main.ControlBarDelayMs)
+                int distance = Math.Abs(MainWindow.ControlBarDelayChoices[i].Milliseconds - _main.ControlBarDelayMs);
+
+                if (distance < bestDistance)
                 {
+                    bestDistance = distance;
                     delayIndex = i;
-                    break;
                 }
             }
 

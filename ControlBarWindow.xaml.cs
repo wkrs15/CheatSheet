@@ -193,7 +193,12 @@ public partial class ControlBarWindow : Window
         bool hasRect = GetWindowRect(new WindowInteropHelper(this).Handle, out MonitorRect rect);
 
         bool nearTop = cursor.Y <= ShowZone;
-        bool onBar = hasRect
+
+        // 收起来的时候窗口只是 Visibility 折叠了,**矩形还在屏幕顶部原位** ——
+        // 不加 _visible 判断的话,整个条带(约 30px 高)都会被算成"鼠标在条上",
+        // 一进去就立刻弹出来,上面那个延迟等于白设(实测:用户说"还是太快了")。
+        bool onBar = _visible
+                     && hasRect
                      && cursor.X >= rect.Left && cursor.X <= rect.Right
                      && cursor.Y >= rect.Top && cursor.Y <= rect.Bottom;
 
