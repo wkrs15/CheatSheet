@@ -42,6 +42,9 @@ public partial class SettingsWindow : Window
 
         VersionText.Text = _main.VersionLabel;
 
+        // 下拉框里放"控制条出现延迟"的档位(立即 / 0.2 / 0.4 / 0.8 秒)。
+        BarDelayBox.ItemsSource = MainWindow.ControlBarDelayChoices.Select(choice => choice.Label).ToList();
+
         Loaded += (_, _) =>
         {
             _initialized = true;
@@ -89,6 +92,21 @@ public partial class SettingsWindow : Window
             ResumeBox.IsChecked = _main.RememberPosition;
             LoopBox.IsChecked = _main.LoopPlayback;
             AutoUpdateBox.IsChecked = _main.CheckUpdatesOnStart;
+
+            // 控制条出现延迟:配置里存的是毫秒,下拉框里选最接近的那一档。
+            int delayIndex = 2;
+
+            for (int i = 0; i < MainWindow.ControlBarDelayChoices.Length; i++)
+            {
+                if (MainWindow.ControlBarDelayChoices[i].Milliseconds == _main.ControlBarDelayMs)
+                {
+                    delayIndex = i;
+                    break;
+                }
+            }
+
+            if (BarDelayBox.SelectedIndex != delayIndex)
+                BarDelayBox.SelectedIndex = delayIndex;
 
             // 播放模式:本地视频 / 浏览器。
             if (_main.IsWebMode)
@@ -190,6 +208,18 @@ public partial class SettingsWindow : Window
 
     private void Resume_Click(object sender, RoutedEventArgs e)
         => _main.RememberPosition = ResumeBox.IsChecked == true;
+
+    /// <summary>控制条"出现延迟"下拉框(存活 0.2 / 0.4 / 0.8 秒)。</summary>
+    private void BarDelay_Changed(object sender, SelectionChangedEventArgs e)
+    {
+        if (_syncing || !_initialized)
+            return;
+
+        int index = BarDelayBox.SelectedIndex;
+
+        if (index >= 0 && index < MainWindow.ControlBarDelayChoices.Length)
+            _main.ControlBarDelayMs = MainWindow.ControlBarDelayChoices[index].Milliseconds;
+    }
 
     private void Loop_Click(object sender, RoutedEventArgs e)
         => _main.LoopPlayback = LoopBox.IsChecked == true;

@@ -77,10 +77,19 @@ public partial class ControlBarWindow : Window
     /// <summary>(物理像素)鼠标移到屏幕顶部这么多像素以内就把条放出来。</summary>
     private const int ShowZone = 8;
 
+    /// <summary>左键是否按着(拖窗口 / 拖标签页路过顶部时,别把条弹出来)。</summary>
+    [DllImport("user32.dll")]
+    private static extern short GetAsyncKeyState(int vKey);
+
+    private const int VK_LBUTTON = 0x01;
+
     private readonly MainWindow _main;
     private readonly DispatcherTimer _autoHide;
     private bool _syncing;
     private bool _visible = true;
+
+    /// <summary>鼠标是"什么时候"进到顶部那条区域的(用来算"停够久了没")。MinValue = 当前不在里面。</summary>
+    private DateTime _zoneEnteredAt = DateTime.MinValue;
 
     /// <summary>正在地址栏里打字。期间要保持条不收起,而且焦点不能交还给游戏。</summary>
     private bool _editing;
@@ -188,7 +197,45 @@ public partial class ControlBarWindow : Window
                      && cursor.X >= rect.Left && cursor.X <= rect.Right
                      && cursor.Y >= rect.Top && cursor.Y <= rect.Bottom;
 
+        if (!nearTop)
+        {
+            // 离开顶部那条了:下次进来重新计时。
+            _zoneEnteredAt = DateTime.MinValue;
+        }
+        else
+        {
+            // "等一下再伸出来":控制条会盖住屏幕最上面那一条,鼠标只是扫过去
+            // (点浏览器标签页、点游戏顶部 UI、拖窗口标题栏)时不该弹出来挡一下。
+            // 只有停在顶部这一条里够久了才出来。
+            nearTop = ShouldRevealAtTop();
+        }
+
         SetVisible(nearTop || onBar);
+    }
+
+    /// <summary>鼠标停在顶部这一条里够久了吗(顺便排除"正按着左键路过")。</summary>
+    private bool ShouldRevealAtTop()
+    {
+        // 已经在按左键(拖窗口、拖标签页):这时候冒出来最讨厌,直接不算。
+        // 重新计时,等松开手再停稳了才出。
+        if ((GetAsyncKeyState(VK_LBUTTON) & 0x8000) != 0)
+        {
+            _zoneEnteredAt = DateTime.MinValue;
+            return false;
+        }
+
+        int delay = _main.ControlBarDelayMs;
+
+        if (delay <= 0)
+            return true;
+
+        if (_zoneEnteredAt == DateTime.MinValue)
+        {
+            _zoneEnteredAt = DateTime.UtcNow;
+            return false;
+        }
+
+        return (DateTime.UtcNow - _zoneEnteredAt).TotalMilliseconds >= delay;
     }
 
     private void SetVisible(bool visible)

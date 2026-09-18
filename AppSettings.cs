@@ -44,6 +44,12 @@ public sealed class AppSettings
     public bool RememberPosition { get; set; } = true;
 
     /// <summary>
+    /// 鼠标停在屏幕顶部多久之后控制条才伸出来(毫秒,0 = 立刻)。
+    /// 给个几千毫秒不至于,但"扫过去点个浏览器标签就被挡一下"确实烦,默认 0.4 秒。
+    /// </summary>
+    public int ControlBarDelayMs { get; set; } = 400;
+
+    /// <summary>
     /// 「最近观看」:本地文件和网页混在一起,最近看的排最前(控制条上的最近下拉栏用它)。
     /// 本地文件的进度不在这里,单独存在 <see cref="Resume"/> 里 —— 两者按路径关联。
     /// </summary>

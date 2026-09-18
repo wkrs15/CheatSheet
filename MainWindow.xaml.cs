@@ -471,6 +471,32 @@ public partial class MainWindow : Window
         }
     }
 
+    /// <summary>
+    /// 鼠标停在屏幕顶部多久之后控制条才伸出来(毫秒,0 = 立刻)。
+    /// 控制条会盖住屏幕最上面那一条,鼠标扫过去(点浏览器标签、点游戏顶部 UI)就弹出来很挡事。
+    /// </summary>
+    internal int ControlBarDelayMs
+    {
+        get => _settings.ControlBarDelayMs;
+        set
+        {
+            if (_settings.ControlBarDelayMs == value)
+                return;
+
+            _settings.ControlBarDelayMs = Math.Clamp(value, 0, 2000);
+            _settings.Save();
+        }
+    }
+
+    /// <summary>控制条出现延迟的可选档位(设置窗口用它填下拉框)。</summary>
+    internal static readonly (string Label, int Milliseconds)[] ControlBarDelayChoices =
+    {
+        ("立即", 0),
+        ("0.2 秒", 200),
+        ("0.4 秒(默认)", 400),
+        ("0.8 秒", 800)
+    };
+
     /// <summary>拖动窗口边缘时是否按视频比例等比例缩放(设置窗口里的开关)。</summary>
     internal bool ProportionalResize
     {

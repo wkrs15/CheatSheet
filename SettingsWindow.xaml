@@ -222,6 +222,27 @@
 
                         <Border Style="{StaticResource SectionRule}" />
 
+                        <TextBlock Text="控制条" Style="{StaticResource SectionTitle}" />
+
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="96" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Text="出现延迟" Style="{StaticResource RowLabel}" />
+                            <hc:ComboBox x:Name="BarDelayBox" Grid.Column="1"
+                                         Width="160" Height="26"
+                                         HorizontalAlignment="Left"
+                                         VerticalContentAlignment="Center"
+                                         SelectionChanged="BarDelay_Changed" />
+                        </Grid>
+
+                        <TextBlock Style="{StaticResource Hint}"
+                                   Margin="0,10,0,0"
+                                   Text="鼠标停在屏幕最顶端多久之后控制条才伸出来。设长一点,扫过去点浏览器标签、点游戏顶部按钮时就不会被它挡一下(按住左键拖东西路过时一律不弹)。" />
+
+                        <Border Style="{StaticResource SectionRule}" />
+
                         <TextBlock Text="声音与速度" Style="{StaticResource SectionTitle}" />
 
                         <Grid>
