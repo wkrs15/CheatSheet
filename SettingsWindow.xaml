@@ -46,6 +46,13 @@
             <Setter Property="Margin" Value="0,0,0,6" />
         </Style>
 
+        <!-- 注意:样式里的 TargetType 必须和元素类型对得上 —— WPF 的 XAML 编译器不校验这个,
+             套错了编译照过、一打开窗口就抛 XamlParseException("TargetType 与元素类型不匹配")。
+             2026-09-18 就是把这个套到 CheckBox 上炸过一次。 -->
+        <Style x:Key="OptionCheck" TargetType="CheckBox">
+            <Setter Property="Margin" Value="0,0,0,6" />
+        </Style>
+
         <Style x:Key="HotkeyButton" TargetType="Button">
             <Setter Property="FontFamily" Value="Consolas" />
             <Setter Property="MinWidth" Value="132" />
@@ -140,7 +147,7 @@
                         <Border Style="{StaticResource SectionRule}" />
 
                         <TextBlock Text="播放行为" Style="{StaticResource SectionTitle}" />
-                        <CheckBox x:Name="ResumeBox" Style="{StaticResource OptionRadio}"
+                        <CheckBox x:Name="ResumeBox" Style="{StaticResource OptionCheck}"
                                   Content="记住本地视频的播放进度(下次打开接着看)"
                                   Click="Resume_Click" />
                         <CheckBox x:Name="LoopBox"
