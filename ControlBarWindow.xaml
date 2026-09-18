@@ -78,6 +78,15 @@
                     <ControlTemplate TargetType="ToggleButton">
                         <Border x:Name="Bd" Background="{TemplateBinding Background}" CornerRadius="6" Padding="8,0">
                             <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                <!-- 图标:由 Tag 给(Segoe MDL2 的字符)。没给 Tag 的胶囊(清晰度 / 选集 / 最近)
+                                     不留这一段空白,见下面的触发器。 -->
+                                <TextBlock x:Name="IconGlyph"
+                                           Text="{TemplateBinding Tag}"
+                                           FontFamily="Segoe MDL2 Assets"
+                                           FontSize="12"
+                                           Margin="0,1,6,0"
+                                           Foreground="#B3FFFFFF"
+                                           VerticalAlignment="Center" />
                                 <TextBlock Text="{TemplateBinding Content}"
                                            MaxWidth="168"
                                            TextTrimming="CharacterEllipsis"
@@ -91,6 +100,10 @@
                             </StackPanel>
                         </Border>
                         <ControlTemplate.Triggers>
+                            <!-- Tag 没设 = 这个胶囊不带图标 -->
+                            <Trigger Property="Tag" Value="{x:Null}">
+                                <Setter TargetName="IconGlyph" Property="Visibility" Value="Collapsed" />
+                            </Trigger>
                             <Trigger Property="IsMouseOver" Value="True">
                                 <Setter TargetName="Bd" Property="Background" Value="#33FFFFFF" />
                             </Trigger>
@@ -292,6 +305,7 @@
                 <ToggleButton x:Name="DanmakuToggle"
                               Style="{StaticResource ChapterToggleButton}"
                               Visibility="Collapsed"
+                              Tag="&#xE8F2;"
                               Click="DanmakuToggle_Click"
                               ToolTip="弹幕档位:开启 / 精选 / 关闭" />
 
