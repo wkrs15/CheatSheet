@@ -172,7 +172,7 @@ public partial class MainWindow
         _webTitle = string.Empty;
         _webQualities.Clear();
         _webQualityIndex = -1;
-        _webDanmakuOn = null;
+        _webDanmakuMode = null;
         ClearWebParts();
 
         // 控制条 / 窗口标题改回本地那一套(本地视频还开着的话,文件名接着显示)。
@@ -894,12 +894,31 @@ public partial class MainWindow
     /// <summary>当前画质是第几项(-1 = 没读到)。</summary>
     private int _webQualityIndex = -1;
 
-    /// <summary>弹幕开着吗(null = 页面上没这个开关)。</summary>
-    private bool? _webDanmakuOn;
+    /// <summary>
+    /// 当前弹幕档位("开启" / "精选" / "关闭";null = 页面上没这个开关)。
+    /// <para>
+    /// 不能用 bool:B 站登录后是<b>三档</b>(精选只有登录用户才有),
+    /// 而未登录只有开 / 关 —— 用 bool 的话"精选"会被当成"开启"。
+    /// </para>
+    /// </summary>
+    private string? _webDanmakuMode;
+
+    /// <summary>
+    /// 正在切档位。切一次要 1~2 秒(点完必须回读确认才能知道切到哪一档了),
+    /// 期间再点会把上一次的结果搅乱 —— 用户连点几下就会看到一串互相矛盾的提示。
+    /// </summary>
+    private bool _webDanmakuBusy;
+
+    /// <summary>弹幕的三个档位(顺序就是页面开关的轮转顺序:开 → 精选 → 关)。</summary>
+    private static readonly string[] DanmakuModes = { "开启", "精选", "关闭" };
 
     /// <summary>画质列表的显示版本(按签名缓存,控制条每次刷新都来读它)。</summary>
     private IReadOnlyList<ChapterItem> _webQualityItems = Array.Empty<ChapterItem>();
     private string _webQualityItemsSignature = string.Empty;
+
+    /// <summary>弹幕档位列表的显示版本(同样按签名缓存)。</summary>
+    private IReadOnlyList<ChapterItem> _webDanmakuModes = Array.Empty<ChapterItem>();
+    private string _webDanmakuModesSignature = string.Empty;
 
     /// <summary>
     /// 页面里选集列表的标题(第 0 项 = 第 1 集)。
@@ -974,9 +993,11 @@ public partial class MainWindow
             " return { t: titles, c: current," +
             "   q: qs.map(el => (el.textContent || '').replace(/\\s+/g, ' ').trim())," +
             "   qi: qs.findIndex(el => el.classList.contains('bpx-state-active'))," +
-            // 优先看 input 的勾选;读不到就退回容器的状态类(state-3 = 关),别动不动就是 null。
-            "   dm: dm ? !!dm.checked" +
-            "     : (dmWrap ? !dmWrap.className.includes('bui-danmaku-switch-state-3') : null) };" +
+            // 弹幕档位:容器类名里的 state-N 是唯一能分出三档的来源
+            // (1 = 开、2 = 精选、3 = 关);input 的勾选只能分"开 / 关"两级,
+            // 所以只当兜底(N 读不到时用)。
+            "   ds: dmWrap ? (String(dmWrap.className).match(/bui-danmaku-switch-state-(\\d+)/) || [0, 0])[1] - 0 : 0," +
+            "   dc: dm ? !!dm.checked : null };" +
             "})();";
 
         try
@@ -989,7 +1010,7 @@ public partial class MainWindow
                 ClearWebParts();
                 _webQualities.Clear();
                 _webQualityIndex = -1;
-                _webDanmakuOn = null;
+                _webDanmakuMode = null;
 
                 if (_webPartsSignature.Length > 0)
                 {
@@ -1017,13 +1038,16 @@ public partial class MainWindow
 
             _webQualityIndex = root.GetProperty("qi").GetInt32();
 
-            System.Text.Json.JsonElement danmaku = root.GetProperty("dm");
-            _webDanmakuOn = danmaku.ValueKind switch
+            System.Text.Json.JsonElement danmakuOn = root.GetProperty("dc");
+
+            bool? isOn = danmakuOn.ValueKind switch
             {
                 System.Text.Json.JsonValueKind.True => true,
                 System.Text.Json.JsonValueKind.False => false,
                 _ => null
             };
+
+            _webDanmakuMode = DanmakuModeFrom(root.GetProperty("ds").GetInt32(), isOn);
 
             string signature = BuildWebPartsSignature();
 
@@ -1042,7 +1066,7 @@ public partial class MainWindow
     }
 
     private string BuildWebPartsSignature()
-        => _webCurrentPart + "|" + _webQualityIndex + "|" + _webDanmakuOn + "|"
+        => _webCurrentPart + "|" + _webQualityIndex + "|" + _webDanmakuMode + "|"
            + string.Join('\u0001', _webParts) + "|" + string.Join('\u0001', _webQualities);
 
     /// <summary>把播放器相关的读取结果清空(换了文档 / 退出网页模式时用)。</summary>
@@ -1108,7 +1132,50 @@ public partial class MainWindow
             ? CleanQualityLabel(_webQualities[_webQualityIndex])
             : string.Empty;
 
-    internal bool? WebDanmakuOn => _webDanmakuOn;
+    /// <summary>当前弹幕档位("开启" / "精选" / "关闭";null = 页面上没这个开关)。</summary>
+    internal string? WebDanmakuMode => _webDanmakuMode;
+
+    /// <summary>弹幕档位列表(控制条的下拉栏用它,当前档带勾)。</summary>
+    internal IReadOnlyList<ChapterItem> WebDanmakuModes
+    {
+        get
+        {
+            if (_webDanmakuModesSignature != _webPartsSignature)
+            {
+                _webDanmakuModesSignature = _webPartsSignature;
+
+                var items = new List<ChapterItem>(DanmakuModes.Length);
+
+                for (int i = 0; i < DanmakuModes.Length; i++)
+                    items.Add(new ChapterItem(i, DanmakuModes[i], DanmakuModes[i] == _webDanmakuMode));
+
+                _webDanmakuModes = items;
+            }
+
+            return _webDanmakuModes;
+        }
+    }
+
+    /// <summary>
+    /// 把页面上读到的档位翻译成名字。
+    /// <para>
+    /// 容器类名里的 <c>bui-danmaku-switch-state-N</c> 是唯一能分出三档的来源:
+    /// 1 = 开、2 = 精选、3 = 关(登录后才有 2);读不到 N 时退化成 input 的勾选,
+    /// 那就只能分"开 / 关"两档。
+    /// </para>
+    /// </summary>
+    private static string? DanmakuModeFrom(int state, bool? on) => state switch
+    {
+        1 => "开启",
+        2 => "精选",
+        3 => "关闭",
+        _ => on switch
+        {
+            true => "开启",
+            false => "关闭",
+            _ => null
+        }
+    };
 
     /// <summary>画质菜单的显示列表(按签名缓存,免得控制条每次刷新都重建)。</summary>
     internal IReadOnlyList<ChapterItem> WebQualityItems
@@ -1173,100 +1240,163 @@ public partial class MainWindow
     }
 
     /// <summary>
-    /// 弹幕开 / 关。
+    /// 切弹幕档位(开启 / 精选 / 关闭)。
     /// <para>
-    /// 点的是播放器弹幕开关里的 <c>input</c>(2026-09-18 实测:点它站点状态真的会翻
-    /// ——外层容器的类从 <c>bui-danmaku-switch-state-1</c> 变成 <c>state-3</c>;
-    /// 而点外层 div 反而没用)。
+    /// B 站的开关是"<b>点一下换一档</b>"的轮转式:容器类名
+    /// <c>bui-danmaku-switch-state-1 / -2 / -3</c> 分别是 开 / 精选 / 关
+    /// (精选只有登录用户有,未登录只有开 / 关两档)。
     /// </para>
     /// <para>
-    /// 点完**回读一次**再报结果:以前这里点完就乐观地改状态、也不管成没成,
-    /// 一旦点空了(选择器没命中 / 页面结构变了)用户看到的就是"按了没反应"。
-    /// 回读还顺便兜住"input 点不动"的情况 —— 换 label 再试一次。
+    /// 所以这里**不能**"点一下就当成切好了":点一次之后必须回读真实档位,
+    /// 没到目标就再点,最多三轮(三档最多点两次)。同一轮里回读值没变就立刻放弃 ——
+    /// 免得在"点不动"的页面上越点越乱。
     /// </para>
     /// </summary>
-    internal void ToggleWebDanmaku()
+    internal void SetWebDanmakuMode(string mode)
     {
-        if (!_webMode)
+        if (!_webMode || string.IsNullOrEmpty(mode) || _webDanmakuBusy)
             return;
 
-        _ = ToggleWebDanmakuAsync();
+        _webDanmakuBusy = true;
+        _ = SetWebDanmakuModeAsync(mode);
     }
 
-    private async Task ToggleWebDanmakuAsync()
+    private async Task SetWebDanmakuModeAsync(string target)
     {
-        bool? before = await ReadDanmakuStateAsync();
-
-        if (before is null)
+        try
         {
-            Growl.Warning(new GrowlInfo
+            string? before = await ReadDanmakuModeAsync();
+
+            if (before is null)
             {
-                Message = "这个页面上没找到弹幕开关(播放器可能还没加载出来)",
-                WaitTime = 4
-            });
-            return;
-        }
+                Growl.Warning("没找到弹幕开关", "danmaku");
+                return;
+            }
 
-        await ExecuteWebScriptAsync(DanmakuClickScript);
-
-        // 等站点自己把状态渲染完再回读。
-        await Task.Delay(600);
-
-        bool? after = await ReadDanmakuStateAsync();
-
-        if (after == before)
-        {
-            // input 点不动就换 label 再试(用户真实点击是打在 label 上的)。
-            await ExecuteWebScriptAsync(DanmakuLabelClickScript);
-            await Task.Delay(600);
-
-            after = await ReadDanmakuStateAsync();
-        }
-
-        if (after is null || after == before)
-        {
-            Growl.Warning(new GrowlInfo
+            if (before != target)
             {
-                Message = "弹幕开关点了没反应(网站这边改结构了),可以在小窗里直接点页面上的开关",
-                WaitTime = 5
-            });
-            return;
+                for (int attempt = 0; attempt < 3; attempt++)
+                {
+                    // 两种页面形态都照顾到:
+                    // ①菜单式 —— 页面上已经列出了"开启 / 精选 / 关闭",直接点目标那一项
+                    //   (菜单没展开时找不到,那一轮就退化成下面那种);
+                    // ②轮转式 —— 点一下开关换一档。
+                    if (!await ClickDanmakuMenuItemAsync(target))
+                        await ExecuteWebScriptAsync(DanmakuClickScript);
+
+                    // 等站点自己把状态渲染完再回读。
+                    await Task.Delay(600);
+
+                    string? now = await ReadDanmakuModeAsync();
+
+                    if (now is not null)
+                        _webDanmakuMode = now;
+
+                    // 到目标了、读不到了、或者点了一下纹丝不动 —— 都别再点。
+                    if (now is null || now == target || now == before)
+                        break;
+
+                    before = now;
+                }
+
+                _webPartsSignature = BuildWebPartsSignature();
+                RaiseStateChanged();
+
+                if (_webDanmakuMode == target)
+                    Growl.Info($"弹幕:{target}", "danmaku");
+                else
+                    Growl.Warning($"弹幕没切成「{target}」(当前:{_webDanmakuMode ?? "未知"})", "danmaku");
+            }
         }
-
-        _webDanmakuOn = after;
-        _webPartsSignature = BuildWebPartsSignature();
-
-        Growl.Info(after == true ? "弹幕:开" : "弹幕:关", "danmaku");
-        RaiseStateChanged();
+        finally
+        {
+            _webDanmakuBusy = false;
+        }
     }
 
+    /// <summary>点弹幕开关(点 input;它点不动时退回 label —— 用户真实点击打的是 label)。</summary>
     private const string DanmakuClickScript =
-        "(() => { const el = document.querySelector('" + DanmakuSwitchSelector + "'); if (el) el.click(); })();";
+        "(() => { const i = document.querySelector('" + DanmakuSwitchSelector + "');" +
+        " if (i) { i.click(); return true; }" +
+        " const l = document.querySelector('.bui-danmaku-switch-label');" +
+        " if (l) { l.click(); return true; }" +
+        " return false; })();";
 
-    private const string DanmakuLabelClickScript =
-        "(() => { const el = document.querySelector('.bui-danmaku-switch-label'); if (el) el.click(); })();";
+    /// <summary>
+    /// 菜单式页面:按文字点那一项(找到并点了返回 true)。
+    /// <para>
+    /// 只在弹幕自己的容器里找(<c>class</c> 里带 <c>dm</c>),不然"关闭"这种词
+    /// 在页面别处也可能出现(比如字幕设置面板);"精选"这个词够独特,允许放宽到全页找。
+    /// </para>
+    /// </summary>
+    private async Task<bool> ClickDanmakuMenuItemAsync(string label)
+    {
+        CoreWebView2? core = WebView?.CoreWebView2;
 
-    /// <summary>回读弹幕开关的状态(null = 页面上没这个开关)。</summary>
-    private async Task<bool?> ReadDanmakuStateAsync()
+        if (core is null)
+            return false;
+
+        bool allowAnywhere = label == "精选";
+
+        string script = "(() => { const label = '" + label + "';" +
+            " const cands = [...document.querySelectorAll('li,div,span,p,a,button')].filter(el => {" +
+            "   const t = (el.textContent || '').replace(/\\s+/g, '');" +
+            "   if (t !== label) return false;" +
+            // 取最里层那个,别点在外层大容器上
+            "   if ([...el.children].some(c => (c.textContent || '').replace(/\\s+/g, '') === label)) return false;" +
+            "   const r = el.getBoundingClientRect();" +
+            "   if (!r.width || !r.height) return false;" +
+            (allowAnywhere ? "" : "   if (!el.closest('[class*=dm], [class*=danmaku]')) return false;") +
+            "   return true;" +
+            " });" +
+            " if (!cands.length) return false;" +
+            " cands[0].click();" +
+            " return true; })();";
+
+        try
+        {
+            string json = await core.ExecuteScriptAsync(script);
+
+            return json == "true";
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    /// <summary>回读弹幕档位(null = 页面上没这个开关)。</summary>
+    private async Task<string?> ReadDanmakuModeAsync()
     {
         CoreWebView2? core = WebView?.CoreWebView2;
 
         if (core is null)
             return null;
 
-        const string script = "(() => { const el = document.querySelector('" + DanmakuSwitchSelector + "');" +
-            " return el ? !!el.checked : null; })();";
+        const string script = "(() => { const w = document.querySelector('" + DanmakuSwitchWrapperSelector + "');" +
+            " const i = document.querySelector('" + DanmakuSwitchSelector + "');" +
+            " if (!w && !i) return null;" +
+            " const m = w ? String(w.className).match(/bui-danmaku-switch-state-(\\d+)/) : null;" +
+            " return { s: m ? (m[1] - 0) : 0, c: i ? !!i.checked : null }; })();";
 
         try
         {
             string json = await core.ExecuteScriptAsync(script);
 
-            return json switch
+            if (string.IsNullOrEmpty(json) || json == "null")
+                return null;
+
+            using var doc = System.Text.Json.JsonDocument.Parse(json);
+            System.Text.Json.JsonElement root = doc.RootElement;
+
+            bool? on = root.GetProperty("c").ValueKind switch
             {
-                "true" => true,
-                "false" => false,
+                System.Text.Json.JsonValueKind.True => true,
+                System.Text.Json.JsonValueKind.False => false,
                 _ => null
             };
+
+            return DanmakuModeFrom(root.GetProperty("s").GetInt32(), on);
         }
         catch
         {

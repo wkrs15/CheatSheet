@@ -64,10 +64,6 @@
             <Setter Property="Background" Value="#33FFFFFF" />
         </Style>
 
-        <!-- 弹幕按钮的两种状态色:亮 = 开,暗 = 关(一眼能看出当前状态,不用点开下拉栏) -->
-        <SolidColorBrush x:Key="BarIconOn" Color="#F2FFFFFF" />
-        <SolidColorBrush x:Key="BarIconOff" Color="#59FFFFFF" />
-
         <!-- 「选集」下拉栏的按钮:一条胶囊,显示当前是第几集 + 一个下箭头 -->
         <Style x:Key="ChapterToggleButton" TargetType="ToggleButton">
             <Setter Property="Height" Value="30" />
@@ -290,14 +286,73 @@
                     </Border>
                 </Popup>
 
-                <!-- 弹幕开关的独立按钮:网页模式且页面上确实有这个开关时才出现。
-                     亮 = 开、暗 = 关 —— 以前它藏在「播放器」下拉栏里,切弹幕得先点开下拉栏 -->
-                <Button x:Name="DanmakuButton"
-                        Style="{StaticResource BarButton}"
-                        Content="&#xE8F2;"
-                        Visibility="Collapsed"
-                        Click="Danmaku_Click"
-                        ToolTip="弹幕" />
+                <!-- 弹幕档位:网页模式且页面上确实有这个开关时才出现。
+                     按钮上直接写当前档位(开启 / 精选 / 关闭)—— B 站登录后是三档,
+                     所以不能做成"开 / 关"两态的开关按钮。 -->
+                <ToggleButton x:Name="DanmakuToggle"
+                              Style="{StaticResource ChapterToggleButton}"
+                              Visibility="Collapsed"
+                              Click="DanmakuToggle_Click"
+                              ToolTip="弹幕档位:开启 / 精选 / 关闭" />
+
+                <Popup x:Name="DanmakuPopup"
+                       PlacementTarget="{Binding ElementName=DanmakuToggle}"
+                       Placement="Bottom"
+                       VerticalOffset="2"
+                       StaysOpen="False"
+                       AllowsTransparency="True"
+                       PopupAnimation="Fade"
+                       Opened="DanmakuPopup_Opened"
+                       Closed="DanmakuPopup_Closed">
+                    <Border Background="#F215171B"
+                            BorderBrush="#33FFFFFF"
+                            BorderThickness="1"
+                            CornerRadius="8"
+                            Padding="4"
+                            Margin="0,0,8,8">
+                        <ItemsControl x:Name="DanmakuModeList">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Button Style="{StaticResource ChapterItemButton}"
+                                            Tag="{Binding}"
+                                            ToolTip="{Binding Label}"
+                                            Click="DanmakuModeItem_Click">
+                                        <Grid Width="150">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="16" />
+                                                <ColumnDefinition Width="*" />
+                                            </Grid.ColumnDefinitions>
+
+                                            <!-- 当前档位打个勾 -->
+                                            <TextBlock Grid.Column="0"
+                                                       Text="&#xE73E;"
+                                                       FontFamily="Segoe MDL2 Assets"
+                                                       FontSize="11"
+                                                       Foreground="#FF2E90FF"
+                                                       VerticalAlignment="Center">
+                                                <TextBlock.Style>
+                                                    <Style TargetType="TextBlock">
+                                                        <Setter Property="Visibility" Value="Hidden" />
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding IsCurrent}" Value="True">
+                                                                <Setter Property="Visibility" Value="Visible" />
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </TextBlock.Style>
+                                            </TextBlock>
+
+                                            <TextBlock Grid.Column="1"
+                                                       Text="{Binding Label}"
+                                                       TextTrimming="CharacterEllipsis"
+                                                       VerticalAlignment="Center" />
+                                        </Grid>
+                                    </Button>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </Border>
+                </Popup>
 
                 <ToggleButton x:Name="RecentToggle"
                               Style="{StaticResource ChapterToggleButton}"

@@ -102,7 +102,8 @@ public partial class ControlBarWindow : Window
     /// (StaysOpen=False 会先关掉上一个)"先开后关"的顺序会把标志位清错。
     /// </para>
     /// </summary>
-    private bool MenuOpen => ChapterPopup.IsOpen || RecentPopup.IsOpen || PlayerPopup.IsOpen;
+    private bool MenuOpen => ChapterPopup.IsOpen || RecentPopup.IsOpen
+                             || PlayerPopup.IsOpen || DanmakuPopup.IsOpen;
 
     /// <summary>开始编辑前的前台窗口(通常是游戏),打完字还给它。</summary>
     private IntPtr _focusBeforeEdit;
@@ -278,6 +279,9 @@ public partial class ControlBarWindow : Window
             if (PlayerPopup.IsOpen)
                 PlayerPopup.IsOpen = false;
 
+            if (DanmakuPopup.IsOpen)
+                DanmakuPopup.IsOpen = false;
+
             var fade = new DoubleAnimation(1, 0, FadeOut)
             {
                 EasingFunction = new CubicEase { EasingMode = EasingMode.EaseIn }
@@ -390,26 +394,35 @@ public partial class ControlBarWindow : Window
     }
 
     /// <summary>
-    /// 弹幕开关的独立按钮:只在"网页模式 + 页面上确实有弹幕开关"时出现
+    /// 弹幕档位:只在"网页模式 + 页面上读到了这个开关"时出现
     /// (本地模式、B 站首页、播放器还没渲染出来都藏着,免得挂一个按不动的按钮)。
-    /// 亮 = 开、暗 = 关,不点开任何下拉栏就能看出当前状态。
+    /// 按钮上写当前档位 —— B 站登录后是 开启 / 精选 / 关闭 三档,写"开 / 关"两态会漏掉精选。
     /// </summary>
     private void SyncDanmaku()
     {
-        bool? on = _main.WebDanmakuOn;
+        string? mode = _main.WebDanmakuMode;
 
-        if (!_main.IsWebMode || on is null)
+        if (!_main.IsWebMode || mode is null)
         {
-            DanmakuButton.Visibility = Visibility.Collapsed;
+            if (DanmakuPopup.IsOpen)
+                DanmakuPopup.IsOpen = false;
+
+            DanmakuToggle.Visibility = Visibility.Collapsed;
+            DanmakuModeList.ItemsSource = null;
             return;
         }
 
-        DanmakuButton.Visibility = Visibility.Visible;
-        DanmakuButton.Foreground = (Brush)FindResource(on == true ? "BarIconOn" : "BarIconOff");
-        DanmakuButton.ToolTip = on == true ? "弹幕:开(点一下关掉)" : "弹幕:关(点一下打开)";
+        DanmakuToggle.Visibility = Visibility.Visible;
+        DanmakuToggle.Content = mode;
+
+        // 列表是主窗口缓存着的:内容没变就别换 ItemsSource(否则勾选状态会闪)。
+        IReadOnlyList<MainWindow.ChapterItem> modes = _main.WebDanmakuModes;
+
+        if (!ReferenceEquals(DanmakuModeList.ItemsSource, modes))
+            DanmakuModeList.ItemsSource = modes;
     }
 
-    // ---------------- 播放器下拉栏(清晰度)+ 弹幕按钮 ----------------
+    // ---------------- 播放器下拉栏(清晰度)+ 弹幕档位 ----------------
 
     private void PlayerToggle_Click(object sender, RoutedEventArgs e)
         => PlayerPopup.IsOpen = PlayerToggle.IsChecked == true;
@@ -440,8 +453,35 @@ public partial class ControlBarWindow : Window
         _main.SelectWebQuality(item.Index);
     }
 
-    private void Danmaku_Click(object sender, RoutedEventArgs e)
-        => _main.ToggleWebDanmaku();
+    private void DanmakuToggle_Click(object sender, RoutedEventArgs e)
+        => DanmakuPopup.IsOpen = DanmakuToggle.IsChecked == true;
+
+    private void DanmakuPopup_Opened(object sender, EventArgs e)
+    {
+        KeepBarAliveForMenu();
+
+        // 和控制条一样:弹层是独立顶层窗口,不补 NOACTIVATE 就会把前台从游戏那儿抢走。
+        if (PresentationSource.FromVisual(DanmakuPopup.Child) is HwndSource source)
+        {
+            IntPtr handle = source.Handle;
+            SetWindowLong(handle, GWL_EXSTYLE,
+                GetWindowLong(handle, GWL_EXSTYLE) | WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW);
+        }
+    }
+
+    private void DanmakuPopup_Closed(object sender, EventArgs e)
+    {
+        DanmakuToggle.IsChecked = false;
+    }
+
+    private void DanmakuModeItem_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button { Tag: MainWindow.ChapterItem item })
+            return;
+
+        DanmakuPopup.IsOpen = false;
+        _main.SetWebDanmakuMode(item.Label);
+    }
 
     /// <summary>
     /// 把选集下拉栏刷成主窗口那边的当前内容(网页模式 = B 站分P,本地 = 播放列表)。
