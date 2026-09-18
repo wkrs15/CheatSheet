@@ -44,9 +44,12 @@ public sealed class AppSettings
     public bool RememberPosition { get; set; } = true;
 
     /// <summary>
-    /// 「最近观看」:路径列表,最近看的排最前(控制条上的最近下拉栏用它)。
-    /// 进度不在这里,单独存在 <see cref="Resume"/> 里 —— 两者按路径关联。
+    /// 「最近观看」:本地文件和网页混在一起,最近看的排最前(控制条上的最近下拉栏用它)。
+    /// 本地文件的进度不在这里,单独存在 <see cref="Resume"/> 里 —— 两者按路径关联。
     /// </summary>
+    public List<RecentEntry> Recents { get; set; } = new();
+
+    /// <summary>v0.8 的"最近观看"(只有本地路径)。只读它做一次性迁移,别再往里写。</summary>
     public List<string> RecentFiles { get; set; } = new();
 
     /// <summary>启动时自动检查更新(一天最多查一次,见 MainWindow.AutoCheckUpdatesAsync)。</summary>
@@ -90,7 +93,16 @@ public sealed class AppSettings
                 {
                     loaded.Hotkeys ??= new Dictionary<string, string>();
                     loaded.Resume ??= new Dictionary<string, double>();
+                    loaded.Recents ??= new List<RecentEntry>();
                     loaded.RecentFiles ??= new List<string>();
+
+                    // v0.8 只记本地路径:一次性搬进新的统一列表(网页那部分是新加的)。
+                    if (loaded.Recents.Count == 0 && loaded.RecentFiles.Count > 0)
+                    {
+                        foreach (string path in loaded.RecentFiles)
+                            loaded.Recents.Add(new RecentEntry { Kind = RecentEntry.LocalKind, Target = path });
+                    }
+
                     return loaded;
                 }
             }
@@ -117,4 +129,23 @@ public sealed class AppSettings
     }
 
     private static readonly JsonSerializerOptions SerializerOptions = new() { WriteIndented = true };
+}
+
+/// <summary>「最近观看」的一条:本地文件或者网页。</summary>
+public sealed class RecentEntry
+{
+    public const string LocalKind = "local";
+    public const string WebKind = "web";
+
+    /// <summary><see cref="LocalKind"/> 或 <see cref="WebKind"/>。</summary>
+    public string Kind { get; set; } = LocalKind;
+
+    /// <summary>本地 = 文件路径;网页 = 网址(带 <c>?p=N</c>,所以能回到当初那一P)。</summary>
+    public string Target { get; set; } = string.Empty;
+
+    /// <summary>网页的标题(本地不需要:显示时取文件名)。</summary>
+    public string Title { get; set; } = string.Empty;
+
+    [JsonIgnore]
+    public bool IsWeb => Kind == WebKind;
 }

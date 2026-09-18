@@ -258,7 +258,6 @@ public partial class ControlBarWindow : Window
             SpeedButton.Content = _main.SpeedLabel;
             VolumeSlider.Value = _main.VolumePercent;
             TitleText.Text = _main.FileLabel;
-            ClickThroughChip.Visibility = _main.ClickThrough ? Visibility.Visible : Visibility.Collapsed;
 
             // 地址栏只在浏览器模式下出现。
             AddressRow.Visibility = _main.IsWebMode ? Visibility.Visible : Visibility.Collapsed;
@@ -477,7 +476,7 @@ public partial class ControlBarWindow : Window
             return;
 
         RecentPopup.IsOpen = false;
-        _main.PlayRecent(item.Path);
+        _main.PlayRecent(item);
     }
 
     // ---------------- 地址栏 ----------------

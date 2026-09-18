@@ -166,6 +166,7 @@ public partial class MainWindow
         _webPosition = 0;
         _webDuration = 0;
         _webMissingPolls = 0;
+        _webRecordedUrl = string.Empty;
 
         // 下次进来是新页面,选集列表和网页标题都重新来。
         _webTitle = string.Empty;
@@ -401,6 +402,7 @@ public partial class MainWindow
         _webPosition = 0;
         _webDuration = 0;
         _webMissingPolls = 0;
+        _webRecordedUrl = string.Empty;
 
         if (e.IsSuccess)
         {
@@ -525,7 +527,13 @@ public partial class MainWindow
                 _webEndedHandled = false;
 
             if (_webVideoPlaying)
+            {
                 _webPlayedOnce = true;
+
+                // 真的开始播了才记进「最近观看」(和本地那边"开始播才算"一个口径):
+                // 只是路过的页面、还没播就关掉的不占地方。
+                RememberWebVisitOnce();
+            }
 
             double rate = root.GetProperty("r").GetDouble();
             if (rate > 0.01)
@@ -920,6 +928,28 @@ public partial class MainWindow
 
     /// <summary>这次的"播完了"是否已经处理过 —— 一轮结束只切一次集。</summary>
     private bool _webEndedHandled;
+
+    /// <summary>已经记进「最近观看」的网址(同一个网址只记一次,别每 200ms 刷新一遍列表)。</summary>
+    private string _webRecordedUrl = string.Empty;
+
+    /// <summary>
+    /// 把当前这个网页记进「最近观看」。
+    /// <para>
+    /// 记的是<b>当前地址</b>:B 站站内切分P 会用 history API 把 <c>?p=N</c> 写进地址栏
+    /// (见轮询里兜地址那一段),所以这个网址本身就带着"当初看的是哪一P" ——
+    /// 下次点开就直接回到那一P,不用另存一份页码。
+    /// </para>
+    /// </summary>
+    private void RememberWebVisitOnce()
+    {
+        string url = _webCurrentUrl;
+
+        if (url.Length == 0 || url == _webRecordedUrl)
+            return;
+
+        _webRecordedUrl = url;
+        RememberRecentWeb(url, _webTitle);
+    }
 
     internal IReadOnlyList<string> WebParts => _webParts;
 

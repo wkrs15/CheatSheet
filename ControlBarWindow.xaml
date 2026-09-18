@@ -210,19 +210,6 @@
                            Foreground="#B3FFFFFF"
                            Text="CheatSheet" />
 
-                <!-- 鼠标穿透是个"开了容易忘"的状态,给它一个可见的标记 -->
-                <Border x:Name="ClickThroughChip"
-                        Visibility="Collapsed"
-                        Margin="4,0,2,0"
-                        Padding="6,2"
-                        CornerRadius="4"
-                        Background="#332E90FF"
-                        VerticalAlignment="Center">
-                    <TextBlock Text="穿透中"
-                               FontSize="11"
-                               Foreground="#FF8EC2FF" />
-                </Border>
-
                 <Border Style="{StaticResource BarSeparator}" />
 
                 <!-- 「播放器」下拉栏:网页模式下把播放器自己的画质 / 弹幕暴露出来,
@@ -343,7 +330,7 @@
                                     <DataTemplate>
                                         <Button Style="{StaticResource ChapterItemButton}"
                                                 Tag="{Binding}"
-                                                ToolTip="{Binding Path}"
+                                                ToolTip="{Binding Target}"
                                                 Click="RecentItem_Click">
                                             <Grid Width="360">
                                                 <Grid.ColumnDefinitions>

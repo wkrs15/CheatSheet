@@ -108,8 +108,6 @@ public partial class MainWindow : Window
     /// 隐藏走的是 SW_HIDE,窗口状态不再是最小化。</summary>
     private bool _hiddenByHotkey;
 
-    /// <summary>鼠标穿透开着(窗口带 WS_EX_TRANSPARENT,点击直接落到游戏上)。</summary>
-    private bool _clickThrough;
     private double _speedBeforeHold = 1.0;
     private DateTime _seekHoldStart;
     private bool _seekHoldIsLongPress;
@@ -120,7 +118,7 @@ public partial class MainWindow : Window
 
         _settings = AppSettings.Load();
 
-        // 保留的全局热键:播放、快退、快进、显示/隐藏窗口、透明度 ±、上/下一集、倍速、音量、鼠标穿透。
+        // 保留的全局热键:播放、快退、快进、上/下一集、显示/隐藏窗口、透明度 ±。
         // 快退/快进走 BeginSeekHold —— 点一下跳 5 秒,按住则是 2 倍速播放。
         // 全部都包在 RunHotkey 里 —— 它会保证动作执行完把前台还给游戏。
         _hotkeyActions = new List<HotkeyAction>
@@ -130,11 +128,7 @@ public partial class MainWindow : Window
             new("SeekForward", "快进(按住 2 倍速)", "Ctrl+Alt+Right", () => RunHotkey(() => BeginSeekHold("SeekForward", 1))),
             new("PrevEpisode", "上一集 / 上一条", "Ctrl+Alt+Up", () => RunHotkey(PlayPrevious)),
             new("NextEpisode", "下一集 / 下一条", "Ctrl+Alt+Down", () => RunHotkey(PlayNext)),
-            new("SpeedNext", "倍速切换", "Ctrl+Alt+S", () => RunHotkey(CycleSpeed)),
-            new("VolumeDown", "音量 -", "Ctrl+Alt+C", () => RunHotkey(() => ChangeVolume(-5))),
-            new("VolumeUp", "音量 +", "Ctrl+Alt+V", () => RunHotkey(() => ChangeVolume(5))),
             new("WindowVisible", "显示 / 隐藏播放窗口", "Ctrl+Alt+T", () => RunHotkey(ToggleWindowVisible)),
-            new("ClickThrough", "鼠标穿透 开 / 关", "Ctrl+Alt+P", () => RunHotkey(ToggleClickThrough)),
             new("OpacityDown", "透明度 -", "Ctrl+Alt+Z", () => RunHotkey(() => ChangeOpacity(-10))),
             new("OpacityUp", "透明度 +", "Ctrl+Alt+X", () => RunHotkey(() => ChangeOpacity(10))),
         };
@@ -366,10 +360,10 @@ public partial class MainWindow : Window
     /// <summary>是否记住本地视频的播放进度(设置窗口里的开关)。</summary>
     // ---------------- 「最近观看」列表(控制条上的最近下拉栏) ----------------
 
-    /// <summary>最近观看的一条。<see cref="ProgressText"/> 是上次看到的位置(没有就是空)。</summary>
-    internal sealed record RecentItem(string Path, string Name, string ProgressText);
+    /// <summary>最近观看的一条:本地文件名 / 网页标题 + 上次的进度(网页那条显示"网页")。</summary>
+    internal sealed record RecentItem(string Target, string Name, string ProgressText, bool IsWeb);
 
-    /// <summary>最近看过的文件,最近看的排最前(按需重建,内容没变就复用同一个列表实例)。</summary>
+    /// <summary>最近看过的本地文件和网页,最近看的排最前(内容没变就复用同一个列表实例)。</summary>
     internal IReadOnlyList<RecentItem> RecentItems
     {
         get
@@ -379,39 +373,61 @@ public partial class MainWindow : Window
         }
     }
 
-    /// <summary>从最近列表里接着看某个文件(进度由断点续播那套自动跳过去)。</summary>
-    internal void PlayRecent(string path)
+    /// <summary>从最近列表里接着看:本地文件跳到断点,网页回到那个视频。</summary>
+    internal void PlayRecent(RecentItem item)
     {
-        if (!File.Exists(path))
+        ArgumentNullException.ThrowIfNull(item);
+
+        if (item.IsWeb)
+        {
+            EnterWebMode(item.Target);
+            return;
+        }
+
+        if (!File.Exists(item.Target))
         {
             Growl.Warning(new GrowlInfo { Message = "这个文件已经不在了,已从最近列表里去掉。", WaitTime = 4 });
 
-            _settings.RecentFiles.RemoveAll(p => string.Equals(p, path, StringComparison.OrdinalIgnoreCase));
+            _settings.Recents.RemoveAll(entry =>
+                !entry.IsWeb && string.Equals(entry.Target, item.Target, StringComparison.OrdinalIgnoreCase));
             _recentSignature = string.Empty;
             RaiseStateChanged();
             return;
         }
 
-        StartPlaylist(new[] { path }, 0);
+        StartPlaylist(new[] { item.Target }, 0);
     }
 
-    /// <summary>把文件挪到"最近观看"最前面(去重 + 封顶)。</summary>
+    /// <summary>把本地文件挪到"最近观看"最前面(去重 + 封顶)。</summary>
     private void RememberRecentFile(string? path)
     {
-        if (string.IsNullOrWhiteSpace(path))
-            return;
+        if (!string.IsNullOrWhiteSpace(path))
+            RememberRecent(RecentEntry.LocalKind, path, string.Empty);
+    }
 
-        _settings.RecentFiles.RemoveAll(p => string.Equals(p, path, StringComparison.OrdinalIgnoreCase));
-        _settings.RecentFiles.Insert(0, path);
+    /// <summary>把看过的网页挪到"最近观看"最前面。</summary>
+    private void RememberRecentWeb(string? url, string? title)
+    {
+        if (!string.IsNullOrWhiteSpace(url))
+            RememberRecent(RecentEntry.WebKind, url, title ?? string.Empty);
+    }
 
-        while (_settings.RecentFiles.Count > MaxRecentFiles)
-            _settings.RecentFiles.RemoveAt(_settings.RecentFiles.Count - 1);
+    private void RememberRecent(string kind, string target, string title)
+    {
+        _settings.Recents.RemoveAll(entry =>
+            entry.Kind == kind && string.Equals(entry.Target, target, StringComparison.OrdinalIgnoreCase));
+
+        _settings.Recents.Insert(0, new RecentEntry { Kind = kind, Target = target, Title = title });
+
+        while (_settings.Recents.Count > MaxRecentFiles)
+            _settings.Recents.RemoveAt(_settings.Recents.Count - 1);
     }
 
     private void EnsureRecentItems()
     {
-        string signature = string.Join('\u0001', _settings.RecentFiles.Select(
-            path => path + "|" + (_settings.Resume.TryGetValue(path, out double position) ? position.ToString("0") : "-")));
+        string signature = string.Join('\u0001', _settings.Recents.Select(entry =>
+            entry.Kind + "|" + entry.Target + "|" + entry.Title + "|" +
+            (_settings.Resume.TryGetValue(entry.Target, out double position) ? position.ToString("0") : "-")));
 
         if (signature == _recentSignature)
             return;
@@ -420,16 +436,22 @@ public partial class MainWindow : Window
 
         var items = new List<RecentItem>();
 
-        foreach (string path in _settings.RecentFiles)
+        foreach (RecentEntry entry in _settings.Recents)
         {
-            if (!File.Exists(path))
+            if (entry.IsWeb)
+            {
+                items.Add(new RecentItem(entry.Target, CleanWebTitle(entry.Title), "网页", IsWeb: true));
+                continue;
+            }
+
+            if (!File.Exists(entry.Target))
                 continue;
 
-            string progress = _settings.Resume.TryGetValue(path, out double position) && position >= ResumeMinimumSeconds
+            string progress = _settings.Resume.TryGetValue(entry.Target, out double position) && position >= ResumeMinimumSeconds
                 ? FormatTime(TimeSpan.FromSeconds(position))
                 : string.Empty;
 
-            items.Add(new RecentItem(path, Path.GetFileName(path), progress));
+            items.Add(new RecentItem(entry.Target, Path.GetFileName(entry.Target), progress, IsWeb: false));
         }
 
         _recentItems = items;
@@ -970,82 +992,6 @@ public partial class MainWindow : Window
     [DllImport("user32.dll")]
     private static extern bool SetForegroundWindow(IntPtr hWnd);
 
-    private const int GWL_EXSTYLE = -20;
-
-    /// <summary>窗口对鼠标"透明":点击/滚轮直接穿过它落到下面的窗口(游戏)上。</summary>
-    private const int WS_EX_TRANSPARENT = 0x00000020;
-
-    [DllImport("user32.dll", SetLastError = true)]
-    private static extern int GetWindowLong(IntPtr hWnd, int nIndex);
-
-    [DllImport("user32.dll", SetLastError = true)]
-    private static extern int SetWindowLong(IntPtr hWnd, int nIndex, int dwNewLong);
-
-    // ---------------- 位置预设(吸附到屏幕某个角) ----------------
-
-    /// <summary>屏幕的四个角(按窗口所在的那台显示器算)。</summary>
-    internal enum ScreenCorner
-    {
-        TopLeft,
-        TopRight,
-        BottomLeft,
-        BottomRight
-    }
-
-    private const uint MONITOR_DEFAULTTONEAREST = 2;
-
-    [DllImport("user32.dll")]
-    private static extern IntPtr MonitorFromWindow(IntPtr hwnd, uint dwFlags);
-
-    [DllImport("user32.dll")]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool GetMonitorInfo(IntPtr hMonitor, ref MonitorInfo lpmi);
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct MonitorInfo
-    {
-        public int cbSize;
-        public NativeRect rcMonitor;
-        public NativeRect rcWork;
-        public uint dwFlags;
-    }
-
-    /// <summary>
-    /// 把窗口挪到屏幕某个角。用显示器<b>工作区</b>(rcWork)算,所以不会压到任务栏;
-    /// 留 16px 边距,贴边太死在小窗形态下反而不好看也不好抓。
-    /// </summary>
-    internal void MoveToScreenCorner(ScreenCorner corner)
-    {
-        IntPtr monitor = MonitorFromWindow(new WindowInteropHelper(this).Handle, MONITOR_DEFAULTTONEAREST);
-        var info = new MonitorInfo { cbSize = Marshal.SizeOf<MonitorInfo>() };
-
-        if (!GetMonitorInfo(monitor, ref info))
-            return;
-
-        // 系统给的是物理像素,窗口的 Left/Top 是 DIP —— 高 DPI 下必须换算(和拖边调整大小同一个坑)。
-        var dpi = System.Windows.Media.VisualTreeHelper.GetDpi(this);
-        const double Margin = 16;
-
-        double left = (info.rcWork.Left / dpi.DpiScaleX) + Margin;
-        double top = (info.rcWork.Top / dpi.DpiScaleY) + Margin;
-        double right = (info.rcWork.Right / dpi.DpiScaleX) - Width - Margin;
-        double bottom = (info.rcWork.Bottom / dpi.DpiScaleY) - Height - Margin;
-
-        // 窗口比工作区还大时,以左上为准(免得算出负数跑到屏幕外面去)。
-        Left = Math.Round(corner is ScreenCorner.TopRight or ScreenCorner.BottomRight ? Math.Max(left, right) : left);
-        Top = Math.Round(corner is ScreenCorner.BottomLeft or ScreenCorner.BottomRight ? Math.Max(top, bottom) : top);
-
-        Growl.Info($"已移到{Cornername(corner)}", "corner");
-    }
-
-    private static string Cornername(ScreenCorner corner) => corner switch
-    {
-        ScreenCorner.TopLeft => "左上角",
-        ScreenCorner.TopRight => "右上角",
-        ScreenCorner.BottomLeft => "左下角",
-        _ => "右下角"
-    };
-
     [DllImport("user32.dll")]
     private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint pid);
 
@@ -1544,42 +1490,6 @@ public partial class MainWindow : Window
         Growl.Info($"画面透明度 {_settings.WindowOpacity * 100:0}%{suffix}", "opacity");
     }
 
-    /// <summary>音量 ±(全局热键,和滚轮调音量走同一条路径)。</summary>
-    private void ChangeVolume(double delta)
-    {
-        ApplyVolume(_volumePercent + delta);
-
-        // 固定 token:连按快捷键时只刷新同一条提示,不会叠一屏。
-        Growl.Info(_muted ? "静音" : $"音量 {_volumePercent:0}%", "volume");
-    }
-
-    // ---------------- 鼠标穿透 ----------------
-
-    /// <summary>
-    /// 鼠标穿透:开着时点击直接落到下面的游戏上,小窗只当"看板"用
-    /// (看教程视频时不影响操作)。控制条是独立窗口,照样能点。
-    /// </summary>
-    internal bool ClickThrough => _clickThrough;
-
-    internal void ToggleClickThrough()
-    {
-        _clickThrough = !_clickThrough;
-
-        IntPtr handle = new WindowInteropHelper(this).Handle;
-        int style = GetWindowLong(handle, GWL_EXSTYLE);
-
-        SetWindowLong(handle, GWL_EXSTYLE,
-            _clickThrough ? style | WS_EX_TRANSPARENT : style & ~WS_EX_TRANSPARENT);
-
-        // 网页模式下穿透 = 连网页也点不到了(鼠标转发是我们自己在做的),
-        // 得说清楚,不然用户会以为网页卡死了。
-        string hint = _webMode ? "(网页将点不到,只能用热键和控制条)" : "(点击会落到游戏上)";
-
-        Growl.Info(_clickThrough ? $"鼠标穿透:开 {hint}" : "鼠标穿透:关", "clickthrough");
-
-        RaiseStateChanged();
-    }
-
     // ---------------- 打开与播放 ----------------
 
     /// <summary>打开文件对话框。控制条上的"打开"按钮也走这里,故为 internal。</summary>
@@ -1806,12 +1716,16 @@ public partial class MainWindow : Window
         while (_settings.Resume.Count > MaxEntries)
             _settings.Resume.Remove(_settings.Resume.Keys.First());
 
-        // 「最近观看」也跟着清一遍(同一个文件可能已经不在硬盘上了)。
-        _settings.RecentFiles.RemoveAll(path =>
+        // 「最近观看」里的本地条目也跟着清一遍(文件可能已经不在硬盘上了;
+        // 网页条目留着 —— 网址不会"过期")。
+        _settings.Recents.RemoveAll(entry =>
         {
+            if (entry.IsWeb)
+                return false;
+
             try
             {
-                return !File.Exists(path);
+                return !File.Exists(entry.Target);
             }
             catch
             {
