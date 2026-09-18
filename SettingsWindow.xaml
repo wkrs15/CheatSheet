@@ -157,16 +157,18 @@
                         <Border Style="{StaticResource SectionRule}" />
 
                         <TextBlock Text="暂停时" Style="{StaticResource SectionTitle}" />
+                        <!-- 默认那一项(调暗)放在最前面:和上面的"播放模式"一样,
+                             第一个就是默认值,不用去找"推荐"标在第几行 -->
+                        <RadioButton x:Name="PauseDimBox" GroupName="PauseBehavior"
+                                     Style="{StaticResource OptionRadio}"
+                                     Content="把画面调暗到 30%(默认)"
+                                     Checked="PauseBehavior_Changed" />
                         <RadioButton x:Name="PauseNothingBox" GroupName="PauseBehavior"
                                      Style="{StaticResource OptionRadio}"
                                      Content="什么都不做"
                                      Checked="PauseBehavior_Changed" />
                         <RadioButton x:Name="PauseHideBox" GroupName="PauseBehavior"
-                                     Style="{StaticResource OptionRadio}"
                                      Content="隐藏视频窗口"
-                                     Checked="PauseBehavior_Changed" />
-                        <RadioButton x:Name="PauseDimBox" GroupName="PauseBehavior"
-                                     Content="把画面调暗到 30%(推荐)"
                                      Checked="PauseBehavior_Changed" />
                         <TextBlock Style="{StaticResource Hint}"
                                    Margin="0,2,0,0"
