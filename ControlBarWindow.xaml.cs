@@ -302,8 +302,10 @@ public partial class ControlBarWindow : Window
         if (!ReferenceEquals(RecentList.ItemsSource, items))
             RecentList.ItemsSource = items;
 
-        // 按钮上直接显示"最近看的那一条",一眼就知道点开是什么。
-        RecentToggle.Content = items[0].Name;
+        // 胶囊上写"最近"而不是最新那条的名字:名字和时间轴标题长得太像,
+        // 用户根本认不出这是个下拉栏(2026-09-18 的实际反馈)。具体看 ToolTip。
+        RecentToggle.Content = items.Count > 1 ? $"最近 {items.Count}" : "最近";
+        RecentToggle.ToolTip = $"最近看过的 {items.Count} 条(本地文件 + 网页)\n最新:{items[0].Name}";
     }
 
     /// <summary>

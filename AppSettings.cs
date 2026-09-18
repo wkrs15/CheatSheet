@@ -103,6 +103,15 @@ public sealed class AppSettings
                             loaded.Recents.Add(new RecentEntry { Kind = RecentEntry.LocalKind, Target = path });
                     }
 
+                    // 老版本连"最近"都没记过(只有断点续播的进度)。
+                    // 那就拿进度表把列表垫上 —— 否则升级上来的用户打开一看是空的,
+                    // 明明有两个看到一半的视频却没地方点(字典是按写入顺序存的,倒过来就是最近的在前)。
+                    if (loaded.Recents.Count == 0 && loaded.Resume.Count > 0)
+                    {
+                        foreach (string path in loaded.Resume.Keys.Reverse())
+                            loaded.Recents.Add(new RecentEntry { Kind = RecentEntry.LocalKind, Target = path });
+                    }
+
                     return loaded;
                 }
             }
